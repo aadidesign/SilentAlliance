@@ -9,6 +9,9 @@
 
 SilentAlliance is a production-ready backend API for an anonymous social discussion platform, inspired by Reddit. It prioritizes user privacy through pseudonymous identities, end-to-end encrypted messaging, and metadata stripping for uploads.
 
+<img width="1312" height="716" alt="image" src="https://github.com/user-attachments/assets/a8f04f6c-c8bd-465f-8c93-be7e98bccc4c" />
+
+
 ### Key Features
 
 - **Pseudonymous Identity System**: Ed25519 keypair-based authentication - no email or phone required
