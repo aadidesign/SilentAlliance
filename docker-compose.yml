@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - RUST_ENV=production
+      - RUST_LOG=info,silent_alliance=debug
+      - DATABASE_URL=postgres://silentalliance:secretpassword@postgres:5432/silentalliance
+      - REDIS_URL=redis://redis:6379
+      - MASTER_KEY=${MASTER_KEY}
+      - JWT_PRIVATE_KEY=${JWT_PRIVATE_KEY}
+      - JWT_PUBLIC_KEY=${JWT_PUBLIC_KEY}
+      - OAUTH_STATE_SECRET=${OAUTH_STATE_SECRET}
+      - STORAGE_LOCAL_PATH=/app/uploads
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - silentalliance
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=silentalliance
+      - POSTGRES_PASSWORD=secretpassword
+      - POSTGRES_DB=silentalliance
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U silentalliance"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - silentalliance
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - silentalliance
+
+volumes:
+  postgres_data:
+  redis_data:
+  uploads:
+
+networks:
+  silentalliance:
+    driver: bridge

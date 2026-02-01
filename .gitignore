@@ -1,0 +1,46 @@
+# Rust
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Keys and secrets
+*.pem
+*.key
+private.pem
+public.pem
+
+# Logs
+*.log
+logs/
+
+# Uploads
+/uploads/
+/temp/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage
+*.profraw
+*.profdata
+coverage/
+tarpaulin-report.html
+
+# Benchmarks
+criterion/
+
+# SQLx offline mode
+.sqlx/
