@@ -36,8 +36,9 @@
   /* ===== TEXT ===== */
   --text-primary: #f1f1f7;
   --text-secondary: #9494b8;
-  --text-tertiary: #5a5a7a;
+  --text-tertiary: #7a7a9e;
   --text-inverted: #06060a;
+  --text-on-accent: #ffffff;
 
   /* ===== FONTS ===== */
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;

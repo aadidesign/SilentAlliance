@@ -15,6 +15,7 @@ import {
   TrendingUp,
   Lock,
   Globe,
+  ChevronDown,
 } from 'lucide-react';
 import { PostCard } from '@/components/post/PostCard';
 import { Button } from '@/components/ui/Button';
@@ -107,22 +108,23 @@ export default function SpacePage() {
   const { isAuthenticated } = useAuthStore();
   const [activeSort, setActiveSort] = useState<PostSort>('hot');
   const [joined, setJoined] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
   const space = sampleSpace;
   const posts = sampleSpacePosts;
 
   return (
-    <div className="space-y-4 -mt-6 -mx-4">
+    <div className="space-y-4">
       {/* Banner */}
-      <div className="relative h-32 sm:h-40 bg-gradient-to-r from-accent/20 via-accent-secondary/10 to-accent/20 overflow-hidden">
+      <div className="relative h-32 sm:h-40 -mx-4 -mt-6 bg-gradient-to-r from-accent/20 via-accent-secondary/10 to-accent/20 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-transparent to-bg-primary" />
       </div>
 
       {/* Space header */}
-      <div className="px-4 -mt-8 relative">
+      <div className="-mt-8 relative">
         <div className="flex flex-col sm:flex-row items-start gap-4">
           {/* Icon */}
           <div className="w-16 h-16 rounded-2xl bg-surface border-4 border-bg-primary flex items-center justify-center shrink-0">
-            <span className="text-2xl font-bold gradient-text">
+            <span className="text-2xl font-bold text-accent">
               {space.name.charAt(0).toUpperCase()}
             </span>
           </div>
@@ -178,87 +180,85 @@ export default function SpacePage() {
         </div>
       </div>
 
-      <div className="px-4 grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-5">
-        {/* Main content */}
-        <div className="space-y-4">
-          {/* Create post */}
-          {isAuthenticated && joined && (
-            <Button
-              variant="outline"
-              className="w-full justify-start gap-2"
-              onClick={() => router.push(`/s/${params.slug}/submit`)}
-              leftIcon={<Plus size={16} />}
-            >
-              Create a post in s/{space.name}
-            </Button>
-          )}
-
-          {/* Sort tabs */}
-          <Tabs
-            tabs={sortTabs}
-            activeTab={activeSort}
-            onChange={(id) => setActiveSort(id as PostSort)}
-          />
-
-          {/* Posts */}
-          <div className="space-y-3">
-            {posts.map((post, i) => (
-              <motion.div
-                key={post.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: i * 0.05 }}
-              >
-                <PostCard
-                  post={post}
-                  onVote={(value) => console.log('Vote:', post.id, value)}
-                />
-              </motion.div>
-            ))}
-          </div>
-        </div>
-
-        {/* Sidebar */}
-        <div className="hidden lg:block space-y-4">
-          {/* About */}
-          <Card>
-            <h3 className="text-sm font-semibold text-text-primary mb-3">About</h3>
-            <p className="text-sm text-text-secondary leading-relaxed mb-4">
-              {space.description}
-            </p>
-            <div className="space-y-2 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-text-tertiary">Created</span>
-                <span className="text-text-secondary">{formatTimeAgo(space.created_at)}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-text-tertiary">Members</span>
-                <span className="text-text-secondary">{formatNumber(space.subscriber_count)}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-text-tertiary">Posts</span>
-                <span className="text-text-secondary">{formatNumber(space.post_count)}</span>
-              </div>
+      {/* About & Rules (collapsible) */}
+      {(space.description || space.rules.length > 0) && (
+        <Card padding="none">
+          <button
+            onClick={() => setShowAbout(!showAbout)}
+            className="flex items-center justify-between w-full px-4 py-3 text-sm font-medium text-text-secondary hover:text-text-primary transition-colors"
+          >
+            <span>About this space</span>
+            <ChevronDown
+              size={16}
+              className={cn(
+                'text-text-tertiary transition-transform duration-200',
+                showAbout && 'rotate-180'
+              )}
+            />
+          </button>
+          {showAbout && (
+            <div className="px-4 pb-4 space-y-4 border-t border-surface-border pt-3">
+              {space.description && (
+                <p className="text-sm text-text-secondary leading-relaxed">
+                  {space.description}
+                </p>
+              )}
+              {space.rules.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">
+                    Rules
+                  </h4>
+                  <ol className="space-y-1.5">
+                    {space.rules.map((rule, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm">
+                        <span className="text-accent font-mono text-xs mt-0.5 shrink-0">
+                          {String(i + 1).padStart(2, '0')}
+                        </span>
+                        <span className="text-text-secondary">{rule}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
             </div>
-          </Card>
-
-          {/* Rules */}
-          {space.rules.length > 0 && (
-            <Card>
-              <h3 className="text-sm font-semibold text-text-primary mb-3">Rules</h3>
-              <ol className="space-y-2">
-                {space.rules.map((rule, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm">
-                    <span className="text-accent font-mono text-xs mt-0.5 shrink-0">
-                      {String(i + 1).padStart(2, '0')}
-                    </span>
-                    <span className="text-text-secondary">{rule}</span>
-                  </li>
-                ))}
-              </ol>
-            </Card>
           )}
-        </div>
+        </Card>
+      )}
+
+      {/* Create post */}
+      {isAuthenticated && joined && (
+        <Button
+          variant="outline"
+          className="w-full justify-start gap-2"
+          onClick={() => router.push(`/s/${params.slug}/submit`)}
+          leftIcon={<Plus size={16} />}
+        >
+          Create a post in s/{space.name}
+        </Button>
+      )}
+
+      {/* Sort tabs */}
+      <Tabs
+        tabs={sortTabs}
+        activeTab={activeSort}
+        onChange={(id) => setActiveSort(id as PostSort)}
+      />
+
+      {/* Posts */}
+      <div className="space-y-3">
+        {posts.map((post, i) => (
+          <motion.div
+            key={post.id}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: Math.min(i * 0.05, 0.3) }}
+          >
+            <PostCard
+              post={post}
+              onVote={(value) => console.log('Vote:', post.id, value)}
+            />
+          </motion.div>
+        ))}
       </div>
     </div>
   );

@@ -2,9 +2,11 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Globe, Flame, Clock, Award, TrendingUp } from 'lucide-react';
+import { Globe, Flame, Clock, Award, TrendingUp, MessageSquare } from 'lucide-react';
 import { PostCard } from '@/components/post/PostCard';
+import { PostSkeleton } from '@/components/ui/Skeleton';
 import { Tabs } from '@/components/ui/Tabs';
+import { EmptyState } from '@/components/ui/EmptyState';
 import type { PostWithContext, PostSort } from '@/types';
 
 const sortTabs = [
@@ -47,23 +49,31 @@ export default function AllPage() {
   const [activeSort, setActiveSort] = useState<PostSort>('hot');
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <h1 className="text-2xl font-bold text-text-primary flex items-center gap-2">
         <Globe size={24} className="text-accent" />
         All
       </h1>
       <Tabs tabs={sortTabs} activeTab={activeSort} onChange={(id) => setActiveSort(id as PostSort)} />
       <div className="space-y-3">
-        {allPosts.map((post, i) => (
-          <motion.div
-            key={post.id}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: i * 0.05 }}
-          >
-            <PostCard post={post} onVote={(value) => console.log('Vote:', value)} />
-          </motion.div>
-        ))}
+        {allPosts.length > 0 ? (
+          allPosts.map((post, i) => (
+            <motion.div
+              key={post.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: Math.min(i * 0.05, 0.3) }}
+            >
+              <PostCard post={post} onVote={(value) => console.log('Vote:', value)} />
+            </motion.div>
+          ))
+        ) : (
+          <EmptyState
+            icon={<MessageSquare size={28} />}
+            title="No posts yet"
+            description="Be the first to start a conversation. Posts from all spaces will appear here."
+          />
+        )}
       </div>
     </div>
   );

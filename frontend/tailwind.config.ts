@@ -41,6 +41,7 @@ const config: Config = {
           secondary: 'var(--text-secondary)',
           tertiary: 'var(--text-tertiary)',
           inverted: 'var(--text-inverted)',
+          'on-accent': 'var(--text-on-accent)',
         },
       },
       fontFamily: {
@@ -48,7 +49,7 @@ const config: Config = {
         mono: ['var(--font-mono)', 'JetBrains Mono', 'monospace'],
       },
       fontSize: {
-        '2xs': ['0.625rem', { lineHeight: '0.875rem' }],
+        '2xs': ['0.6875rem', { lineHeight: '1rem' }],
       },
       borderRadius: {
         '2xl': '1rem',

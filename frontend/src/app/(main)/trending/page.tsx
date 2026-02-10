@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { TrendingUp, Users, ArrowUp } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
+import { EmptyState } from '@/components/ui/EmptyState';
 import Link from 'next/link';
 import { cn, formatNumber } from '@/lib/utils';
 
@@ -40,12 +41,18 @@ export default function TrendingPage() {
           Growing Spaces
         </h2>
         <div className="space-y-2">
-          {trendingSpaces.map((space, i) => (
+          {trendingSpaces.length === 0 ? (
+            <EmptyState
+              icon={<TrendingUp size={28} />}
+              title="Nothing trending yet"
+              description="Check back soon. Growing spaces will appear here."
+            />
+          ) : trendingSpaces.map((space, i) => (
             <motion.div
               key={space.slug}
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.3, delay: i * 0.05 }}
+              transition={{ duration: 0.3, delay: Math.min(i * 0.05, 0.3) }}
             >
               <Link href={`/s/${space.slug}`}>
                 <Card hover padding="sm" className="flex items-center gap-4 px-4">
@@ -53,7 +60,7 @@ export default function TrendingPage() {
                     {i + 1}
                   </span>
                   <div className="w-10 h-10 rounded-xl bg-surface-hover flex items-center justify-center shrink-0">
-                    <span className="text-sm font-bold gradient-text">
+                    <span className="text-sm font-bold text-accent">
                       {space.name.charAt(0).toUpperCase()}
                     </span>
                   </div>
@@ -86,7 +93,7 @@ export default function TrendingPage() {
                 key={topic.tag}
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.2, delay: i * 0.03 }}
+                transition={{ duration: 0.2, delay: Math.min(i * 0.03, 0.3) }}
               >
                 <button className="flex items-center gap-2 px-3 py-2 rounded-xl bg-bg-tertiary border border-surface-border hover:border-accent/20 hover:bg-accent-muted/5 transition-all duration-200 group">
                   <span className="text-sm text-text-secondary group-hover:text-accent transition-colors">

@@ -147,10 +147,12 @@ export default function FeedPage() {
   const router = useRouter();
   const { isAuthenticated } = useAuthStore();
   const [activeSort, setActiveSort] = useState<PostSort>('hot');
+  // TODO: Replace with React Query hook — const { data: posts, isLoading } = useFeedPosts(activeSort);
   const [posts] = useState<PostWithContext[]>(samplePosts);
+  const isLoading = false;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Create post prompt */}
       {isAuthenticated && (
         <Card
@@ -177,13 +179,19 @@ export default function FeedPage() {
 
       {/* Posts */}
       <div className="space-y-3">
-        {posts.length > 0 ? (
+        {isLoading ? (
+          <>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <PostSkeleton key={i} />
+            ))}
+          </>
+        ) : posts.length > 0 ? (
           posts.map((post, i) => (
             <motion.div
               key={post.id}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: i * 0.05 }}
+              transition={{ duration: 0.3, delay: Math.min(i * 0.05, 0.3) }}
             >
               <PostCard
                 post={post}

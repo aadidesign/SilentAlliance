@@ -118,7 +118,7 @@ export default function MessagesPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-7rem)] -mx-4 -my-6 overflow-hidden">
+    <div className="flex h-[calc(100vh-7rem)] -mx-4 -mb-6 rounded-2xl overflow-hidden border border-surface-border">
       {/* Conversations list */}
       <div
         className={cn(
@@ -240,7 +240,7 @@ export default function MessagesPage() {
                     className={cn(
                       'max-w-[75%] rounded-2xl px-4 py-2.5',
                       msg.isOwn
-                        ? 'bg-accent text-white rounded-br-md'
+                        ? 'bg-accent text-text-on-accent rounded-br-md'
                         : 'bg-surface border border-surface-border text-text-primary rounded-bl-md'
                     )}
                   >
@@ -254,13 +254,13 @@ export default function MessagesPage() {
                       <span
                         className={cn(
                           'text-2xs',
-                          msg.isOwn ? 'text-white/60' : 'text-text-tertiary'
+                          msg.isOwn ? 'text-text-on-accent/60' : 'text-text-tertiary'
                         )}
                       >
                         {formatTimeAgo(msg.timestamp)}
                       </span>
                       {msg.isOwn && (
-                        <CheckCheck size={12} className="text-white/60" />
+                        <CheckCheck size={12} className="text-text-on-accent/60" />
                       )}
                     </div>
                   </div>

@@ -16,6 +16,7 @@ import { Input, Textarea } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
 import { Tabs } from '@/components/ui/Tabs';
 import { cn } from '@/lib/utils';
+import { pageEntrance } from '@/lib/motion';
 import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
 
@@ -68,11 +69,11 @@ export default function SubmitPage() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-      >
+        <motion.div
+          initial={pageEntrance.initial}
+          animate={pageEntrance.animate}
+          transition={pageEntrance.transition}
+        >
         <h1 className="text-2xl font-bold text-text-primary mb-6">Create a Post</h1>
 
         {/* Space selector */}

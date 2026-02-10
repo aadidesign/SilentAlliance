@@ -26,6 +26,7 @@ import { Textarea } from '@/components/ui/Input';
 import { Tabs } from '@/components/ui/Tabs';
 import { CommentThread } from '@/components/comment/CommentThread';
 import { cn, formatTimeAgo, formatNumber } from '@/lib/utils';
+import { pageEntrance } from '@/lib/motion';
 import { useAuthStore } from '@/lib/store';
 import type { PostWithContext, CommentWithContext } from '@/types';
 
@@ -229,10 +230,10 @@ export default function PostDetailPage() {
       </button>
 
       {/* Post */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
+        <motion.div
+        initial={pageEntrance.initial}
+        animate={pageEntrance.animate}
+        transition={pageEntrance.transition}
       >
         <Card padding="lg">
           {/* Meta */}

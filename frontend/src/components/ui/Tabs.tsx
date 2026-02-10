@@ -19,6 +19,7 @@ interface TabsProps {
 export function Tabs({ tabs, activeTab, onChange, className }: TabsProps) {
   return (
     <div
+      role="tablist"
       className={cn(
         'flex items-center gap-1 p-1 bg-bg-tertiary rounded-xl border border-surface-border',
         className
@@ -27,6 +28,8 @@ export function Tabs({ tabs, activeTab, onChange, className }: TabsProps) {
       {tabs.map((tab) => (
         <button
           key={tab.id}
+          role="tab"
+          aria-selected={activeTab === tab.id}
           onClick={() => onChange(tab.id)}
           className={cn(
             'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium',

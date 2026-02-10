@@ -73,7 +73,7 @@ export default function LoginPage() {
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-2.5">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent to-accent-secondary flex items-center justify-center">
-              <Shield size={22} className="text-white" />
+              <Shield size={22} className="text-text-on-accent" />
             </div>
             <span className="font-bold text-xl">
               Silent<span className="gradient-text">Alliance</span>
@@ -119,13 +119,10 @@ export default function LoginPage() {
               </Button>
 
               {/* OAuth divider */}
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-surface-border" />
-                </div>
-                <div className="relative flex justify-center text-xs">
-                  <span className="px-3 bg-surface text-text-tertiary">or continue with</span>
-                </div>
+              <div className="flex items-center gap-3">
+                <div className="flex-1 border-t border-surface-border" />
+                <span className="text-xs text-text-tertiary">or continue with</span>
+                <div className="flex-1 border-t border-surface-border" />
               </div>
 
               {/* OAuth buttons */}

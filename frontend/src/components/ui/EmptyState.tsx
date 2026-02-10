@@ -1,5 +1,6 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Button } from './Button';
 
@@ -16,7 +17,12 @@ interface EmptyStateProps {
 
 export function EmptyState({ icon, title, description, action, className }: EmptyStateProps) {
   return (
-    <div className={cn('flex flex-col items-center justify-center py-16 px-4 text-center', className)}>
+    <motion.div
+      initial={{ opacity: 0, scale: 0.97 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.3, delay: 0.1 }}
+      className={cn('flex flex-col items-center justify-center py-16 px-4 text-center', className)}
+    >
       <div className="w-16 h-16 rounded-2xl bg-surface flex items-center justify-center text-text-tertiary mb-4">
         {icon}
       </div>
@@ -27,6 +33,6 @@ export function EmptyState({ icon, title, description, action, className }: Empt
           {action.label}
         </Button>
       )}
-    </div>
+    </motion.div>
   );
 }

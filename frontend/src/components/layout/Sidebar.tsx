@@ -153,16 +153,6 @@ export function Sidebar() {
         </nav>
       )}
 
-      {/* Footer */}
-      <div className="px-6 py-4 mt-auto">
-        <div className="flex items-center gap-1.5 text-text-tertiary">
-          <Shield size={12} />
-          <span className="text-2xs">SilentAlliance v1.0</span>
-        </div>
-        <p className="text-2xs text-text-tertiary/50 mt-1">
-          Privacy-first. No tracking.
-        </p>
-      </div>
     </div>
   );
 
@@ -181,7 +171,7 @@ export function Sidebar() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
+              className="fixed inset-0 z-40 bg-bg-overlay backdrop-blur-sm lg:hidden"
               onClick={closeMobileMenu}
             />
             <motion.aside
@@ -194,7 +184,7 @@ export function Sidebar() {
               {/* Mobile header */}
               <div className="h-16 flex items-center gap-2.5 px-5 border-b border-surface-border">
                 <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent to-accent-secondary flex items-center justify-center">
-                  <Shield size={18} className="text-white" />
+                  <Shield size={18} className="text-text-on-accent" />
                 </div>
                 <span className="font-bold text-lg text-text-primary">
                   Silent<span className="gradient-text">Alliance</span>

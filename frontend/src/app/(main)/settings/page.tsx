@@ -19,6 +19,7 @@ import { Input, Textarea } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
 import { useAuthStore } from '@/lib/store';
 import { cn, shortenFingerprint } from '@/lib/utils';
+import { pageEntrance } from '@/lib/motion';
 import toast from 'react-hot-toast';
 
 export default function SettingsPage() {
@@ -47,11 +48,11 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-      >
+        <motion.div
+          initial={pageEntrance.initial}
+          animate={pageEntrance.animate}
+          transition={pageEntrance.transition}
+        >
         <h1 className="text-2xl font-bold text-text-primary mb-6">Settings</h1>
 
         {/* Profile section */}

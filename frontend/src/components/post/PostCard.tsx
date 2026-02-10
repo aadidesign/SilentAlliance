@@ -44,7 +44,7 @@ export function PostCard({ post, onVote, compact = false }: PostCardProps) {
         {/* Content */}
         <div className="flex-1 min-w-0">
           {/* Meta row */}
-          <div className="flex items-center gap-2 text-xs text-text-tertiary mb-2 flex-wrap">
+          <div className="flex items-center gap-3 text-xs text-text-tertiary mb-2 flex-wrap">
             <Link
               href={`/s/${spaceSlug}`}
               className="flex items-center gap-1.5 font-medium text-text-secondary hover:text-accent transition-colors"
@@ -54,14 +54,12 @@ export function PostCard({ post, onVote, compact = false }: PostCardProps) {
               </div>
               s/{spaceName}
             </Link>
-            <span className="text-text-tertiary/50">&bull;</span>
             <Link
               href={`/u/${post.author_id}`}
               className="hover:text-text-secondary transition-colors"
             >
               {authorName}
             </Link>
-            <span className="text-text-tertiary/50">&bull;</span>
             <time>{formatTimeAgo(post.created_at)}</time>
             {post.is_pinned && (
               <Badge variant="accent">

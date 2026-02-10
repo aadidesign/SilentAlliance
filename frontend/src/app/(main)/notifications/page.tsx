@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import {
   Bell,
   MessageSquare,
+  Reply,
   ArrowBigUp,
   AtSign,
   Shield,
@@ -34,7 +35,7 @@ interface SampleNotification {
 
 const notifIcons: Record<NotificationType, React.ReactNode> = {
   post_reply: <MessageSquare size={16} />,
-  comment_reply: <MessageSquare size={16} />,
+  comment_reply: <Reply size={16} />,
   mention: <AtSign size={16} />,
   new_message: <MessageSquare size={16} />,
   space_invite: <Users size={16} />,
@@ -45,11 +46,11 @@ const notifIcons: Record<NotificationType, React.ReactNode> = {
 const notifColors: Record<NotificationType, string> = {
   post_reply: 'text-accent bg-accent-muted',
   comment_reply: 'text-accent bg-accent-muted',
-  mention: 'text-cyan-400 bg-cyan-400/10',
-  new_message: 'text-emerald-400 bg-emerald-400/10',
-  space_invite: 'text-amber-400 bg-amber-400/10',
-  moderator_action: 'text-rose-400 bg-rose-400/10',
-  system_alert: 'text-orange-400 bg-orange-400/10',
+  mention: 'text-accent-hover bg-accent-muted',
+  new_message: 'text-success bg-success-muted',
+  space_invite: 'text-warning bg-warning-muted',
+  moderator_action: 'text-danger bg-danger-muted',
+  system_alert: 'text-warning bg-warning-muted',
 };
 
 const sampleNotifications: SampleNotification[] = [
@@ -149,7 +150,7 @@ export default function NotificationsPage() {
                 key={notif.id}
                 initial={{ opacity: 0, y: 5 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.2, delay: i * 0.03 }}
+                transition={{ duration: 0.2, delay: Math.min(i * 0.03, 0.3) }}
               >
                 <Link
                   href={notif.link}

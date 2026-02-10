@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -21,7 +21,12 @@ const sizes = {
   xl: 'max-w-xl',
 };
 
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 export function Modal({ isOpen, onClose, title, children, size = 'md', className }: ModalProps) {
+  const modalRef = useRef<HTMLDivElement>(null);
+
   const handleEscape = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -29,16 +34,48 @@ export function Modal({ isOpen, onClose, title, children, size = 'md', className
     [onClose]
   );
 
+  const handleFocusTrap = useCallback((e: KeyboardEvent) => {
+    if (e.key !== 'Tab' || !modalRef.current) return;
+
+    const focusableEls = modalRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
+    if (focusableEls.length === 0) return;
+
+    const firstEl = focusableEls[0];
+    const lastEl = focusableEls[focusableEls.length - 1];
+
+    if (e.shiftKey) {
+      if (document.activeElement === firstEl) {
+        e.preventDefault();
+        lastEl.focus();
+      }
+    } else {
+      if (document.activeElement === lastEl) {
+        e.preventDefault();
+        firstEl.focus();
+      }
+    }
+  }, []);
+
   useEffect(() => {
     if (isOpen) {
       document.addEventListener('keydown', handleEscape);
+      document.addEventListener('keydown', handleFocusTrap);
       document.body.style.overflow = 'hidden';
+
+      // Focus the modal on open
+      requestAnimationFrame(() => {
+        if (modalRef.current) {
+          const firstFocusable = modalRef.current.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
+          if (firstFocusable) firstFocusable.focus();
+        }
+      });
     }
     return () => {
       document.removeEventListener('keydown', handleEscape);
+      document.removeEventListener('keydown', handleFocusTrap);
       document.body.style.overflow = '';
     };
-  }, [isOpen, handleEscape]);
+  }, [isOpen, handleEscape, handleFocusTrap]);
 
   return (
     <AnimatePresence>
@@ -50,11 +87,15 @@ export function Modal({ isOpen, onClose, title, children, size = 'md', className
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            className="absolute inset-0 bg-bg-overlay backdrop-blur-sm"
             onClick={onClose}
           />
           {/* Modal */}
           <motion.div
+            ref={modalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={title ? 'modal-title' : undefined}
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -69,9 +110,10 @@ export function Modal({ isOpen, onClose, title, children, size = 'md', className
             {/* Header */}
             {title && (
               <div className="flex items-center justify-between px-6 py-4 border-b border-surface-border">
-                <h2 className="text-lg font-semibold text-text-primary">{title}</h2>
+                <h2 id="modal-title" className="text-lg font-semibold text-text-primary">{title}</h2>
                 <button
                   onClick={onClose}
+                  aria-label="Close dialog"
                   className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-hover transition-colors"
                 >
                   <X size={18} />

@@ -39,7 +39,7 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent to-accent-secondary flex items-center justify-center">
-              <Shield size={18} className="text-white" />
+              <Shield size={18} className="text-text-on-accent" />
             </div>
             <span className="font-bold text-lg">
               Silent<span className="gradient-text">Alliance</span>
@@ -164,7 +164,7 @@ export default function LandingPage() {
             transition={{ duration: 0.6 }}
           >
             <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-              Built for <span className="gradient-text">Privacy</span>
+              Built for <span className="text-accent">Privacy</span>
             </h2>
             <p className="text-text-secondary max-w-lg mx-auto">
               Every feature designed with one principle: your privacy is non-negotiable.
@@ -258,7 +258,7 @@ export default function LandingPage() {
             transition={{ duration: 0.6 }}
           >
             <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-              How It <span className="gradient-text">Works</span>
+              How It <span className="text-accent">Works</span>
             </h2>
             <p className="text-text-secondary max-w-lg mx-auto">
               Get started in seconds. No sign-up forms. No verification emails.
@@ -332,7 +332,7 @@ export default function LandingPage() {
               <h2 className="text-3xl sm:text-4xl font-bold mb-4">
                 Ready to Join the
                 <br />
-                <span className="gradient-text">Silent Alliance?</span>
+                <span className="text-accent">Silent Alliance?</span>
               </h2>
               <p className="text-text-secondary mb-8 max-w-md mx-auto">
                 Your voice matters. Your identity doesn&apos;t have to be exposed for it to be heard.

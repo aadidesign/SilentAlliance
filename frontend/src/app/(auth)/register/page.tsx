@@ -94,7 +94,7 @@ export default function RegisterPage() {
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-2.5">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent to-accent-secondary flex items-center justify-center">
-              <Shield size={22} className="text-white" />
+              <Shield size={22} className="text-text-on-accent" />
             </div>
             <span className="font-bold text-xl">
               Silent<span className="gradient-text">Alliance</span>

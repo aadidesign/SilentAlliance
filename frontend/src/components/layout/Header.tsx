@@ -51,7 +51,7 @@ export function Header() {
           {/* Logo */}
           <Link href={isAuthenticated ? '/feed' : '/'} className="flex items-center gap-2.5 shrink-0">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent to-accent-secondary flex items-center justify-center">
-              <Shield size={18} className="text-white" />
+              <Shield size={18} className="text-text-on-accent" />
             </div>
             <span className="font-bold text-lg text-text-primary hidden sm:block">
               Silent<span className="gradient-text">Alliance</span>
@@ -97,7 +97,7 @@ export function Header() {
                   onClick={() => router.push('/submit')}
                   className="hidden sm:flex"
                 >
-                  <Plus size={20} />
+                  <Plus size={18} />
                 </Button>
 
                 {/* Messages */}

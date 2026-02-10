@@ -21,6 +21,7 @@ import { Tabs } from '@/components/ui/Tabs';
 import { PostCard } from '@/components/post/PostCard';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { cn, formatNumber, formatTimeAgo, shortenFingerprint } from '@/lib/utils';
+import { pageEntrance } from '@/lib/motion';
 import type { IdentityPublic, PostWithContext } from '@/types';
 
 const sampleIdentity: IdentityPublic = {
@@ -104,9 +105,9 @@ export default function ProfilePage() {
     <div className="space-y-6">
       {/* Profile header */}
       <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
+        initial={pageEntrance.initial}
+        animate={pageEntrance.animate}
+        transition={pageEntrance.transition}
       >
         <Card className="p-6">
           <div className="flex flex-col sm:flex-row items-start gap-5">
@@ -179,7 +180,7 @@ export default function ProfilePage() {
                 key={post.id}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: i * 0.05 }}
+                transition={{ duration: 0.3, delay: Math.min(i * 0.05, 0.3) }}
               >
                 <PostCard post={post} onVote={(value) => console.log('Vote:', value)} />
               </motion.div>

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Input, Textarea } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
 import { cn } from '@/lib/utils';
+import { pageEntrance } from '@/lib/motion';
 import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
 
@@ -43,11 +44,11 @@ export default function CreateSpacePage() {
 
   return (
     <div className="max-w-xl mx-auto">
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-      >
+        <motion.div
+          initial={pageEntrance.initial}
+          animate={pageEntrance.animate}
+          transition={pageEntrance.transition}
+        >
         <h1 className="text-2xl font-bold text-text-primary mb-2">Create a Space</h1>
         <p className="text-sm text-text-secondary mb-6">
           Start a community around a topic you care about.
