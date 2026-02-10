@@ -11,6 +11,7 @@ import type {
   Post,
   PostSort,
   PostWithContext,
+  RegisterResponse,
   Space,
   SpaceMember,
   TimeRange,
@@ -87,8 +88,8 @@ class ApiClient {
 
   // ==================== Auth ====================
 
-  async register(publicKey: string, displayName?: string): Promise<AuthTokens> {
-    return this.request<AuthTokens>('/auth/register', {
+  async register(publicKey: string, displayName?: string): Promise<RegisterResponse> {
+    return this.request<RegisterResponse>('/auth/register', {
       method: 'POST',
       body: JSON.stringify({ public_key: publicKey, display_name: displayName }),
     });

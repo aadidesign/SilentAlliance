@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import {
@@ -13,25 +12,17 @@ import {
   Users,
   AlertTriangle,
   Check,
-  Trash2,
 } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { cn, formatTimeAgo } from '@/lib/utils';
+import { useNotifications } from '@/hooks/queries';
+import { useMarkNotificationRead, useMarkAllNotificationsRead } from '@/hooks/mutations';
+import { useRequireAuth } from '@/hooks/useRequireAuth';
 import type { NotificationType } from '@/types';
-
-interface SampleNotification {
-  id: string;
-  type: NotificationType;
-  title: string;
-  body: string;
-  link: string;
-  is_read: boolean;
-  created_at: string;
-  actor?: { id: string; name: string };
-}
 
 const notifIcons: Record<NotificationType, React.ReactNode> = {
   post_reply: <MessageSquare size={16} />,
@@ -53,74 +44,44 @@ const notifColors: Record<NotificationType, string> = {
   system_alert: 'text-warning bg-warning-muted',
 };
 
-const sampleNotifications: SampleNotification[] = [
-  {
-    id: 'n1',
-    type: 'comment_reply',
-    title: 'CryptoEnthusiast replied to your comment',
-    body: '"Great analysis. I think the most impactful thing we can do..."',
-    link: '/post/p1',
-    is_read: false,
-    created_at: new Date(Date.now() - 600000).toISOString(),
-    actor: { id: 'u1', name: 'CryptoEnthusiast' },
-  },
-  {
-    id: 'n2',
-    type: 'mention',
-    title: 'FOSSAdvocate mentioned you',
-    body: '"@PrivacyAdvocate wrote a great post about this topic..."',
-    link: '/post/p2',
-    is_read: false,
-    created_at: new Date(Date.now() - 3600000).toISOString(),
-    actor: { id: 'u2', name: 'FOSSAdvocate' },
-  },
-  {
-    id: 'n3',
-    type: 'new_message',
-    title: 'New message from CryptoEngineer',
-    body: '"Can you share the repo?"',
-    link: '/messages',
-    is_read: false,
-    created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-    actor: { id: 'u3', name: 'CryptoEngineer' },
-  },
-  {
-    id: 'n4',
-    type: 'post_reply',
-    title: 'New comment on your post',
-    body: '"I\'d add that we should also be supporting open-source alternatives..."',
-    link: '/post/p1',
-    is_read: true,
-    created_at: new Date(Date.now() - 86400000).toISOString(),
-    actor: { id: 'u4', name: 'Anonymous' },
-  },
-  {
-    id: 'n5',
-    type: 'space_invite',
-    title: 'You were invited to s/whistleblowers',
-    body: 'A private space for verified whistleblowers.',
-    link: '/s/whistleblowers',
-    is_read: true,
-    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-  },
-  {
-    id: 'n6',
-    type: 'system_alert',
-    title: 'Security update',
-    body: 'We\'ve enhanced our encryption protocols. No action required.',
-    link: '#',
-    is_read: true,
-    created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
-  },
-];
+function getNotifTitle(type: NotificationType, payload: Record<string, unknown>): string {
+  const actor = (payload.actor_name as string) || 'Someone';
+  switch (type) {
+    case 'post_reply': return `${actor} commented on your post`;
+    case 'comment_reply': return `${actor} replied to your comment`;
+    case 'mention': return `${actor} mentioned you`;
+    case 'new_message': return `New message from ${actor}`;
+    case 'space_invite': return `You were invited to ${(payload.space_name as string) || 'a space'}`;
+    case 'moderator_action': return 'Moderator action on your content';
+    case 'system_alert': return (payload.title as string) || 'System notification';
+  }
+}
+
+function getNotifLink(type: NotificationType, payload: Record<string, unknown>): string {
+  switch (type) {
+    case 'post_reply':
+    case 'comment_reply':
+    case 'mention':
+      return `/post/${(payload.post_id as string) || ''}`;
+    case 'new_message':
+      return '/messages';
+    case 'space_invite':
+      return `/s/${(payload.space_slug as string) || ''}`;
+    default:
+      return '#';
+  }
+}
 
 export default function NotificationsPage() {
-  const [notifications, setNotifications] = useState(sampleNotifications);
+  const { isAuthenticated } = useRequireAuth();
+  const { data, isLoading } = useNotifications();
+  const markReadMutation = useMarkNotificationRead();
+  const markAllReadMutation = useMarkAllNotificationsRead();
+
+  const notifications = data?.data ?? [];
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
-  const markAllRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-  };
+  if (!isAuthenticated) return null;
 
   return (
     <div className="space-y-4">
@@ -135,7 +96,13 @@ export default function NotificationsPage() {
           )}
         </div>
         {unreadCount > 0 && (
-          <Button variant="ghost" size="sm" onClick={markAllRead} leftIcon={<Check size={14} />}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => markAllReadMutation.mutate()}
+            isLoading={markAllReadMutation.isPending}
+            leftIcon={<Check size={14} />}
+          >
             Mark all read
           </Button>
         )}
@@ -143,7 +110,19 @@ export default function NotificationsPage() {
 
       {/* Notifications */}
       <Card padding="none">
-        {notifications.length > 0 ? (
+        {isLoading ? (
+          <div className="divide-y divide-surface-border/50">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-start gap-3 px-4 py-3.5">
+                <Skeleton className="w-9 h-9 rounded-xl" />
+                <div className="flex-1 space-y-1.5">
+                  <Skeleton className="w-3/4 h-4" />
+                  <Skeleton className="w-1/2 h-3" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : notifications.length > 0 ? (
           <div className="divide-y divide-surface-border/50">
             {notifications.map((notif, i) => (
               <motion.div
@@ -153,7 +132,12 @@ export default function NotificationsPage() {
                 transition={{ duration: 0.2, delay: Math.min(i * 0.03, 0.3) }}
               >
                 <Link
-                  href={notif.link}
+                  href={getNotifLink(notif.notification_type, notif.payload)}
+                  onClick={() => {
+                    if (!notif.is_read) {
+                      markReadMutation.mutate(notif.id);
+                    }
+                  }}
                   className={cn(
                     'flex items-start gap-3 px-4 py-3.5',
                     'hover:bg-surface-hover transition-colors',
@@ -164,10 +148,10 @@ export default function NotificationsPage() {
                   <div
                     className={cn(
                       'w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5',
-                      notifColors[notif.type]
+                      notifColors[notif.notification_type]
                     )}
                   >
-                    {notifIcons[notif.type]}
+                    {notifIcons[notif.notification_type]}
                   </div>
 
                   {/* Content */}
@@ -178,11 +162,13 @@ export default function NotificationsPage() {
                         !notif.is_read ? 'text-text-primary font-medium' : 'text-text-secondary'
                       )}
                     >
-                      {notif.title}
+                      {getNotifTitle(notif.notification_type, notif.payload)}
                     </p>
-                    <p className="text-xs text-text-tertiary mt-0.5 truncate">
-                      {notif.body}
-                    </p>
+                    {notif.payload.body && (
+                      <p className="text-xs text-text-tertiary mt-0.5 truncate">
+                        {notif.payload.body as string}
+                      </p>
+                    )}
                     <p className="text-2xs text-text-tertiary mt-1">
                       {formatTimeAgo(notif.created_at)}
                     </p>

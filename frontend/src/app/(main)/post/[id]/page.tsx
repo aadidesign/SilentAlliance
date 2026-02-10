@@ -9,7 +9,6 @@ import {
   MessageSquare,
   Share2,
   Bookmark,
-  MoreHorizontal,
   Pin,
   Lock,
   ExternalLink,
@@ -24,185 +23,13 @@ import { Card } from '@/components/ui/Card';
 import { VoteButton } from '@/components/ui/VoteButton';
 import { Textarea } from '@/components/ui/Input';
 import { Tabs } from '@/components/ui/Tabs';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { CommentThread } from '@/components/comment/CommentThread';
-import { cn, formatTimeAgo, formatNumber } from '@/lib/utils';
+import { formatTimeAgo, formatNumber } from '@/lib/utils';
 import { pageEntrance } from '@/lib/motion';
 import { useAuthStore } from '@/lib/store';
-import type { PostWithContext, CommentWithContext } from '@/types';
-
-// Sample data
-const samplePost: PostWithContext = {
-  id: 'p1',
-  space_id: 'sp1',
-  author_id: 'a1',
-  title: 'The state of privacy in 2026: Are we losing the battle?',
-  content: `With recent developments in surveillance technology and data collection, it feels like personal privacy is becoming more of a luxury than a right.
-
-## The Current Landscape
-
-Over the past year, we've seen:
-
-- **Government surveillance expansion**: Multiple countries have passed laws mandating backdoors in encryption
-- **Corporate data harvesting**: Big tech companies have been caught collecting more data than ever
-- **AI-powered tracking**: New AI models can identify individuals across multiple data sources
-
-## What Can We Do?
-
-1. **Use end-to-end encryption** for all communications
-2. **Self-host** critical services where possible
-3. **Support organizations** fighting for digital rights
-4. **Educate others** about privacy tools and practices
-
-The battle isn't lost, but it requires collective action. What are your thoughts? What privacy tools and practices do you recommend?`,
-  content_type: 'text',
-  url: null,
-  media_ids: [],
-  upvotes: 342,
-  downvotes: 18,
-  score: 324,
-  comment_count: 87,
-  is_pinned: false,
-  is_locked: false,
-  is_removed: false,
-  removed_reason: null,
-  created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-  updated_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-  author: {
-    id: 'a1',
-    public_key_fingerprint: 'abc123def456',
-    display_name: 'PrivacyAdvocate',
-    avatar_hash: null,
-    bio: null,
-    karma: 4200,
-    is_verified: true,
-    created_at: '',
-  },
-  space: {
-    id: 'sp1',
-    name: 'privacy',
-    slug: 'privacy',
-    icon_url: null,
-    subscriber_count: 8200,
-  },
-  user_vote: null,
-};
-
-const sampleComments: CommentWithContext[] = [
-  {
-    id: 'c1',
-    post_id: 'p1',
-    parent_id: null,
-    author_id: 'a2',
-    content: 'Great analysis. I think the most impactful thing we can do is normalize the use of encrypted communications. When only "suspicious" people use encryption, it becomes a flag. When everyone does, it\'s just standard practice.',
-    depth: 0,
-    path: 'c1',
-    upvotes: 156,
-    downvotes: 3,
-    score: 153,
-    is_removed: false,
-    removed_reason: null,
-    created_at: new Date(Date.now() - 3600000 * 1.5).toISOString(),
-    updated_at: new Date(Date.now() - 3600000 * 1.5).toISOString(),
-    author: {
-      id: 'a2',
-      public_key_fingerprint: 'xyz789',
-      display_name: 'CryptoEnthusiast',
-      avatar_hash: null,
-      bio: null,
-      karma: 8900,
-      is_verified: true,
-      created_at: '',
-    },
-    user_vote: 1,
-    replies: [
-      {
-        id: 'c3',
-        post_id: 'p1',
-        parent_id: 'c1',
-        author_id: 'a4',
-        content: 'Exactly this. Signal adoption has been growing but we need it to be the default, not the exception.',
-        depth: 1,
-        path: 'c1/c3',
-        upvotes: 67,
-        downvotes: 1,
-        score: 66,
-        is_removed: false,
-        removed_reason: null,
-        created_at: new Date(Date.now() - 3600000 * 1).toISOString(),
-        updated_at: new Date(Date.now() - 3600000 * 1).toISOString(),
-        author: {
-          id: 'a4',
-          public_key_fingerprint: 'def456',
-          display_name: null,
-          avatar_hash: null,
-          bio: null,
-          karma: 1200,
-          is_verified: false,
-          created_at: '',
-        },
-        user_vote: null,
-        replies: [],
-      },
-    ],
-  },
-  {
-    id: 'c2',
-    post_id: 'p1',
-    parent_id: null,
-    author_id: 'a3',
-    content: 'I\'d add that we should also be supporting open-source alternatives to popular services. Every time you use a FOSS alternative, you\'re voting with your usage for a more private future.',
-    depth: 0,
-    path: 'c2',
-    upvotes: 89,
-    downvotes: 5,
-    score: 84,
-    is_removed: false,
-    removed_reason: null,
-    created_at: new Date(Date.now() - 3600000 * 1.2).toISOString(),
-    updated_at: new Date(Date.now() - 3600000 * 1.2).toISOString(),
-    author: {
-      id: 'a3',
-      public_key_fingerprint: 'ghi012',
-      display_name: 'FOSSAdvocate',
-      avatar_hash: null,
-      bio: null,
-      karma: 3400,
-      is_verified: false,
-      created_at: '',
-    },
-    user_vote: null,
-    replies: [
-      {
-        id: 'c4',
-        post_id: 'p1',
-        parent_id: 'c2',
-        author_id: 'a1',
-        content: 'Agreed. I recently switched to Nextcloud for file storage and it\'s been a game changer. Self-hosting gives you complete control.',
-        depth: 1,
-        path: 'c2/c4',
-        upvotes: 45,
-        downvotes: 0,
-        score: 45,
-        is_removed: false,
-        removed_reason: null,
-        created_at: new Date(Date.now() - 3600000 * 0.8).toISOString(),
-        updated_at: new Date(Date.now() - 3600000 * 0.8).toISOString(),
-        author: {
-          id: 'a1',
-          public_key_fingerprint: 'abc123def456',
-          display_name: 'PrivacyAdvocate',
-          avatar_hash: null,
-          bio: null,
-          karma: 4200,
-          is_verified: true,
-          created_at: '',
-        },
-        user_vote: null,
-        replies: [],
-      },
-    ],
-  },
-];
+import { usePost, usePostComments } from '@/hooks/queries';
+import { useVotePost, useVoteComment, useCreateComment } from '@/hooks/mutations';
 
 const commentSortTabs = [
   { id: 'best', label: 'Best', icon: <Award size={14} /> },
@@ -212,11 +39,53 @@ const commentSortTabs = [
 export default function PostDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const postId = params.id as string;
   const { isAuthenticated } = useAuthStore();
-  const [post] = useState(samplePost);
-  const [comments] = useState(sampleComments);
   const [commentSort, setCommentSort] = useState('best');
   const [newComment, setNewComment] = useState('');
+
+  const { data: post, isLoading: postLoading } = usePost(postId);
+  const { data: commentsData, isLoading: commentsLoading } = usePostComments(postId);
+  const voteMutation = useVotePost();
+  const voteCommentMutation = useVoteComment();
+  const createCommentMutation = useCreateComment(postId);
+
+  const comments = commentsData?.data ?? [];
+
+  if (postLoading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="w-20 h-4" />
+        <Card padding="lg" className="space-y-4">
+          <Skeleton className="w-48 h-4" />
+          <Skeleton className="w-full h-8" />
+          <Skeleton className="w-full h-32" />
+          <Skeleton className="w-48 h-8" />
+        </Card>
+      </div>
+    );
+  }
+
+  if (!post) {
+    return (
+      <div className="text-center py-20">
+        <MessageSquare size={32} className="mx-auto text-text-tertiary mb-3" />
+        <h2 className="text-lg font-semibold text-text-primary mb-1">Post not found</h2>
+        <p className="text-sm text-text-tertiary mb-4">This post may have been deleted or doesn&apos;t exist.</p>
+        <Button variant="secondary" onClick={() => router.push('/feed')}>
+          Back to Feed
+        </Button>
+      </div>
+    );
+  }
+
+  const handleSubmitComment = () => {
+    if (!newComment.trim()) return;
+    createCommentMutation.mutate(
+      { content: newComment },
+      { onSuccess: () => setNewComment('') }
+    );
+  };
 
   return (
     <div className="space-y-4">
@@ -230,7 +99,7 @@ export default function PostDetailPage() {
       </button>
 
       {/* Post */}
-        <motion.div
+      <motion.div
         initial={pageEntrance.initial}
         animate={pageEntrance.animate}
         transition={pageEntrance.transition}
@@ -303,7 +172,7 @@ export default function PostDetailPage() {
             <VoteButton
               score={post.score}
               userVote={post.user_vote}
-              onVote={(value) => console.log('Vote:', value)}
+              onVote={(value) => voteMutation.mutate({ id: post.id, value })}
             />
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-text-tertiary">
               <MessageSquare size={14} />
@@ -337,11 +206,9 @@ export default function PostDetailPage() {
           <div className="flex justify-end mt-3">
             <Button
               size="sm"
-              disabled={!newComment.trim()}
-              onClick={() => {
-                console.log('Submit comment:', newComment);
-                setNewComment('');
-              }}
+              disabled={!newComment.trim() || createCommentMutation.isPending}
+              isLoading={createCommentMutation.isPending}
+              onClick={handleSubmitComment}
             >
               Comment
             </Button>
@@ -367,12 +234,24 @@ export default function PostDetailPage() {
         </div>
 
         <Card padding="sm">
-          {comments.length > 0 ? (
+          {commentsLoading ? (
+            <div className="space-y-4 p-4">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Skeleton className="w-6 h-6 rounded-full" />
+                    <Skeleton className="w-24 h-3" />
+                  </div>
+                  <Skeleton className="w-full h-12" />
+                </div>
+              ))}
+            </div>
+          ) : comments.length > 0 ? (
             <CommentThread
               comments={comments}
-              onVote={(id, value) => console.log('Comment vote:', id, value)}
+              onVote={(id, value) => voteCommentMutation.mutate({ id, value })}
               onReply={(parentId, content) =>
-                console.log('Reply to:', parentId, content)
+                createCommentMutation.mutate({ content, parent_id: parentId })
               }
             />
           ) : (

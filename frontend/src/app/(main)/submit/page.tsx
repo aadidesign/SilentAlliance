@@ -18,20 +18,13 @@ import { Tabs } from '@/components/ui/Tabs';
 import { cn } from '@/lib/utils';
 import { pageEntrance } from '@/lib/motion';
 import { api } from '@/lib/api';
+import { useSpaces } from '@/hooks/queries';
 import toast from 'react-hot-toast';
 
 const contentTypes = [
   { id: 'text', label: 'Text', icon: <FileText size={14} /> },
   { id: 'link', label: 'Link', icon: <Link2 size={14} /> },
   { id: 'media', label: 'Media', icon: <Image size={14} /> },
-];
-
-const spaces = [
-  { slug: 'crypto', name: 'crypto' },
-  { slug: 'privacy', name: 'privacy' },
-  { slug: 'technology', name: 'technology' },
-  { slug: 'whistleblowers', name: 'whistleblowers' },
-  { slug: 'defi', name: 'defi' },
 ];
 
 export default function SubmitPage() {
@@ -43,6 +36,8 @@ export default function SubmitPage() {
   const [selectedSpace, setSelectedSpace] = useState('');
   const [spaceDropdown, setSpaceDropdown] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { data: spacesData } = useSpaces();
+  const spaces = spacesData?.data ?? [];
 
   const isValid = title.trim().length >= 1 && selectedSpace;
 

@@ -7,7 +7,6 @@ import {
   Users,
   FileText,
   Clock,
-  Shield,
   Settings,
   Plus,
   Flame,
@@ -18,82 +17,18 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { PostCard } from '@/components/post/PostCard';
+import { PostSkeleton } from '@/components/ui/Skeleton';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Tabs } from '@/components/ui/Tabs';
 import { Card } from '@/components/ui/Card';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { cn, formatNumber, formatTimeAgo } from '@/lib/utils';
+import { cn, formatNumber } from '@/lib/utils';
 import { useAuthStore } from '@/lib/store';
-import type { PostWithContext, PostSort, Space } from '@/types';
-
-// Sample space data
-const sampleSpace: Space = {
-  id: 'sp1',
-  name: 'privacy',
-  slug: 'privacy',
-  description:
-    'A community dedicated to discussing online privacy, surveillance, encryption, and digital rights. Share news, tools, and strategies for protecting your digital life.',
-  rules: ['Be respectful', 'No doxxing', 'Cite sources', 'No illegal content'],
-  icon_url: null,
-  banner_url: null,
-  is_private: false,
-  is_nsfw: false,
-  creator_id: 'c1',
-  subscriber_count: 8234,
-  post_count: 1247,
-  created_at: new Date(Date.now() - 86400000 * 180).toISOString(),
-  updated_at: new Date(Date.now() - 3600000).toISOString(),
-};
-
-const sampleSpacePosts: PostWithContext[] = [
-  {
-    id: 'sp1',
-    space_id: 'sp1',
-    author_id: 'a1',
-    title: 'VPN comparison for 2026: Which services actually respect your privacy?',
-    content: 'I\'ve spent the past month auditing the top VPN services. Here are my findings based on their actual data practices, not marketing claims...',
-    content_type: 'text',
-    url: null,
-    media_ids: [],
-    upvotes: 567,
-    downvotes: 23,
-    score: 544,
-    comment_count: 198,
-    is_pinned: true,
-    is_locked: false,
-    is_removed: false,
-    removed_reason: null,
-    created_at: new Date(Date.now() - 3600000 * 4).toISOString(),
-    updated_at: new Date(Date.now() - 3600000 * 4).toISOString(),
-    author: { id: 'a1', public_key_fingerprint: 'abc123', display_name: 'SecurityResearcher', avatar_hash: null, bio: null, karma: 7800, is_verified: true, created_at: '' },
-    space: { id: 'sp1', name: 'privacy', slug: 'privacy', icon_url: null, subscriber_count: 8234 },
-    user_vote: 1,
-  },
-  {
-    id: 'sp2',
-    space_id: 'sp1',
-    author_id: 'a2',
-    title: 'I built a browser extension that blocks invisible tracking pixels',
-    content: 'After discovering how many emails contain tracking pixels, I decided to build a solution...',
-    content_type: 'text',
-    url: null,
-    media_ids: [],
-    upvotes: 312,
-    downvotes: 8,
-    score: 304,
-    comment_count: 76,
-    is_pinned: false,
-    is_locked: false,
-    is_removed: false,
-    removed_reason: null,
-    created_at: new Date(Date.now() - 3600000 * 9).toISOString(),
-    updated_at: new Date(Date.now() - 3600000 * 9).toISOString(),
-    author: { id: 'a2', public_key_fingerprint: 'def456', display_name: 'PixelBlocker', avatar_hash: null, bio: null, karma: 3200, is_verified: false, created_at: '' },
-    space: { id: 'sp1', name: 'privacy', slug: 'privacy', icon_url: null, subscriber_count: 8234 },
-    user_vote: null,
-  },
-];
+import { useSpace, useSpacePosts } from '@/hooks/queries';
+import { useVotePost, useJoinSpace, useLeaveSpace } from '@/hooks/mutations';
+import type { PostSort } from '@/types';
 
 const sortTabs = [
   { id: 'hot' as PostSort, label: 'Hot', icon: <Flame size={14} /> },
@@ -105,12 +40,62 @@ const sortTabs = [
 export default function SpacePage() {
   const params = useParams();
   const router = useRouter();
+  const slug = params.slug as string;
   const { isAuthenticated } = useAuthStore();
   const [activeSort, setActiveSort] = useState<PostSort>('hot');
-  const [joined, setJoined] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
-  const space = sampleSpace;
-  const posts = sampleSpacePosts;
+
+  const { data: space, isLoading: spaceLoading } = useSpace(slug);
+  const { data: postsData, isLoading: postsLoading } = useSpacePosts(slug, activeSort);
+  const voteMutation = useVotePost();
+  const joinMutation = useJoinSpace();
+  const leaveMutation = useLeaveSpace();
+
+  const posts = postsData?.data ?? [];
+
+  // Simple joined state tracking (would come from space membership API in production)
+  const [joined, setJoined] = useState(false);
+
+  const handleJoinLeave = () => {
+    if (joined) {
+      leaveMutation.mutate(slug, { onSuccess: () => setJoined(false) });
+    } else {
+      joinMutation.mutate(slug, { onSuccess: () => setJoined(true) });
+    }
+  };
+
+  if (spaceLoading) {
+    return (
+      <div className="space-y-4">
+        <div className="h-32 sm:h-40 -mx-4 -mt-6 bg-gradient-to-r from-accent/20 via-accent-secondary/10 to-accent/20" />
+        <div className="flex items-start gap-4 -mt-8 relative">
+          <Skeleton className="w-16 h-16 rounded-2xl" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="w-40 h-7" />
+            <Skeleton className="w-60 h-4" />
+          </div>
+        </div>
+        <div className="space-y-3 mt-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <PostSkeleton key={i} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (!space) {
+    return (
+      <div className="text-center py-20">
+        <Globe size={32} className="mx-auto text-text-tertiary mb-3" />
+        <h2 className="text-lg font-semibold text-text-primary mb-1">Space not found</h2>
+        <p className="text-sm text-text-tertiary mb-4">This space may have been deleted or doesn&apos;t exist.</p>
+        <Button variant="secondary" onClick={() => router.push('/all')}>
+          Browse All Posts
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -161,7 +146,8 @@ export default function SpacePage() {
                     <Button
                       variant={joined ? 'secondary' : 'primary'}
                       size="sm"
-                      onClick={() => setJoined(!joined)}
+                      onClick={handleJoinLeave}
+                      isLoading={joinMutation.isPending || leaveMutation.isPending}
                     >
                       {joined ? 'Joined' : 'Join'}
                     </Button>
@@ -181,7 +167,7 @@ export default function SpacePage() {
       </div>
 
       {/* About & Rules (collapsible) */}
-      {(space.description || space.rules.length > 0) && (
+      {(space.description || (space.rules && space.rules.length > 0)) && (
         <Card padding="none">
           <button
             onClick={() => setShowAbout(!showAbout)}
@@ -203,7 +189,7 @@ export default function SpacePage() {
                   {space.description}
                 </p>
               )}
-              {space.rules.length > 0 && (
+              {space.rules && space.rules.length > 0 && (
                 <div>
                   <h4 className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">
                     Rules
@@ -230,7 +216,7 @@ export default function SpacePage() {
         <Button
           variant="outline"
           className="w-full justify-start gap-2"
-          onClick={() => router.push(`/s/${params.slug}/submit`)}
+          onClick={() => router.push(`/s/${slug}/submit`)}
           leftIcon={<Plus size={16} />}
         >
           Create a post in s/{space.name}
@@ -246,19 +232,34 @@ export default function SpacePage() {
 
       {/* Posts */}
       <div className="space-y-3">
-        {posts.map((post, i) => (
-          <motion.div
-            key={post.id}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: Math.min(i * 0.05, 0.3) }}
-          >
-            <PostCard
-              post={post}
-              onVote={(value) => console.log('Vote:', post.id, value)}
-            />
-          </motion.div>
-        ))}
+        {postsLoading ? (
+          Array.from({ length: 3 }).map((_, i) => <PostSkeleton key={i} />)
+        ) : posts.length > 0 ? (
+          posts.map((post, i) => (
+            <motion.div
+              key={post.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: Math.min(i * 0.05, 0.3) }}
+            >
+              <PostCard
+                post={post}
+                onVote={(value) => voteMutation.mutate({ id: post.id, value })}
+              />
+            </motion.div>
+          ))
+        ) : (
+          <EmptyState
+            icon={<FileText size={28} />}
+            title="No posts yet"
+            description="Be the first to post in this space."
+            action={
+              isAuthenticated && joined
+                ? { label: 'Create Post', onClick: () => router.push(`/s/${slug}/submit`) }
+                : undefined
+            }
+          />
+        )}
       </div>
     </div>
   );

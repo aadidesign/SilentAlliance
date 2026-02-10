@@ -199,6 +199,12 @@ export interface AuthTokens {
   expires_in: number;
 }
 
+export interface RegisterResponse {
+  identity_id: string;
+  fingerprint: string;
+  challenge: string;
+}
+
 export interface ChallengeResponse {
   challenge: string;
   expires_at: string;

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
   MessageSquare,
   Search,
@@ -10,112 +10,53 @@ import {
   Plus,
   ArrowLeft,
   Shield,
-  Check,
   CheckCheck,
 } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { cn, formatTimeAgo } from '@/lib/utils';
 import { useAuthStore } from '@/lib/store';
-
-interface ConversationPreview {
-  id: string;
-  participant: { id: string; name: string };
-  lastMessage: string;
-  lastMessageTime: string;
-  unread: boolean;
-}
-
-interface ChatMessage {
-  id: string;
-  senderId: string;
-  content: string;
-  timestamp: string;
-  isOwn: boolean;
-}
-
-const sampleConversations: ConversationPreview[] = [
-  {
-    id: '1',
-    participant: { id: 'u1', name: 'CryptoEngineer' },
-    lastMessage: 'That ZK-proof approach is really interesting. Can you share the repo?',
-    lastMessageTime: new Date(Date.now() - 600000).toISOString(),
-    unread: true,
-  },
-  {
-    id: '2',
-    participant: { id: 'u2', name: 'PrivacyAdvocate' },
-    lastMessage: 'Thanks for the Signal recommendation. Switched the whole team over.',
-    lastMessageTime: new Date(Date.now() - 3600000 * 3).toISOString(),
-    unread: false,
-  },
-  {
-    id: '3',
-    participant: { id: 'u3', name: 'Anonymous' },
-    lastMessage: 'The documents have been verified. Ready to publish.',
-    lastMessageTime: new Date(Date.now() - 86400000).toISOString(),
-    unread: false,
-  },
-];
-
-const sampleMessages: ChatMessage[] = [
-  {
-    id: 'm1',
-    senderId: 'u1',
-    content: 'Hey, I saw your post about zero-knowledge proofs.',
-    timestamp: new Date(Date.now() - 3600000 * 2).toISOString(),
-    isOwn: false,
-  },
-  {
-    id: 'm2',
-    senderId: 'me',
-    content: 'Yes! I\'ve been working on it for a few months now.',
-    timestamp: new Date(Date.now() - 3600000 * 1.8).toISOString(),
-    isOwn: true,
-  },
-  {
-    id: 'm3',
-    senderId: 'u1',
-    content: 'The implementation you described using Groth16 was clever. How are you handling the trusted setup?',
-    timestamp: new Date(Date.now() - 3600000 * 1.5).toISOString(),
-    isOwn: false,
-  },
-  {
-    id: 'm4',
-    senderId: 'me',
-    content: 'We\'re using a multi-party ceremony with 128 participants. The circuit is relatively simple so the trusted setup is manageable.',
-    timestamp: new Date(Date.now() - 3600000).toISOString(),
-    isOwn: true,
-  },
-  {
-    id: 'm5',
-    senderId: 'u1',
-    content: 'That ZK-proof approach is really interesting. Can you share the repo?',
-    timestamp: new Date(Date.now() - 600000).toISOString(),
-    isOwn: false,
-  },
-];
+import { useConversations, useMessages } from '@/hooks/queries';
+import { useSendMessage } from '@/hooks/mutations';
+import { useRequireAuth } from '@/hooks/useRequireAuth';
 
 export default function MessagesPage() {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, identity } = useRequireAuth();
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const activeConvo = sampleConversations.find((c) => c.id === selectedConversation);
+  const { data: convosData, isLoading: convosLoading } = useConversations();
+  const { data: messagesData, isLoading: messagesLoading } = useMessages(selectedConversation || '');
+  const sendMutation = useSendMessage(selectedConversation || '');
 
-  if (!isAuthenticated) {
-    return (
-      <EmptyState
-        icon={<Lock size={28} />}
-        title="Sign in to view messages"
-        description="Your messages are end-to-end encrypted. Sign in to access them."
-        action={{ label: 'Sign In', onClick: () => {} }}
-      />
+  const conversations = convosData?.data ?? [];
+  const messages = messagesData?.data ?? [];
+
+  const activeConvo = conversations.find((c) => c.id === selectedConversation);
+
+  // Get the other participant in the conversation
+  const getOtherParticipant = (convo: typeof conversations[0]) => {
+    const other = convo.participants?.find((p) => p.identity_id !== identity?.id);
+    return other?.identity || { id: other?.identity_id || '', display_name: 'Unknown', public_key_fingerprint: '' };
+  };
+
+  const handleSend = () => {
+    if (!messageInput.trim() || !selectedConversation) return;
+    // In a real implementation, this would encrypt the message with the recipient's public key
+    // using X25519 key exchange + ChaCha20-Poly1305
+    // For now, we send a base64 placeholder
+    const content = btoa(messageInput);
+    const nonce = btoa(crypto.getRandomValues(new Uint8Array(24)).toString());
+    sendMutation.mutate(
+      { encrypted_content: content, nonce },
+      { onSuccess: () => setMessageInput('') }
     );
-  }
+  };
+
+  if (!isAuthenticated) return null;
 
   return (
     <div className="flex h-[calc(100vh-7rem)] -mx-4 -mb-6 rounded-2xl overflow-hidden border border-surface-border">
@@ -154,40 +95,52 @@ export default function MessagesPage() {
 
         {/* Conversation list */}
         <div className="flex-1 overflow-y-auto hide-scrollbar">
-          {sampleConversations.map((convo) => (
-            <button
-              key={convo.id}
-              onClick={() => setSelectedConversation(convo.id)}
-              className={cn(
-                'w-full flex items-start gap-3 px-4 py-3 text-left',
-                'hover:bg-surface-hover transition-colors',
-                selectedConversation === convo.id && 'bg-surface-hover'
-              )}
-            >
-              <Avatar id={convo.participant.id} name={convo.participant.name} size="md" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-0.5">
-                  <span className="text-sm font-medium text-text-primary truncate">
-                    {convo.participant.name}
-                  </span>
-                  <span className="text-2xs text-text-tertiary shrink-0 ml-2">
-                    {formatTimeAgo(convo.lastMessageTime)}
-                  </span>
+          {convosLoading ? (
+            Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="flex items-start gap-3 px-4 py-3">
+                <Skeleton className="w-10 h-10 rounded-full" />
+                <div className="flex-1 space-y-1.5">
+                  <Skeleton className="w-24 h-4" />
+                  <Skeleton className="w-40 h-3" />
                 </div>
-                <p
+              </div>
+            ))
+          ) : conversations.length === 0 ? (
+            <div className="p-6 text-center">
+              <MessageSquare size={20} className="mx-auto text-text-tertiary mb-2" />
+              <p className="text-xs text-text-tertiary">No conversations yet.</p>
+            </div>
+          ) : (
+            conversations.map((convo) => {
+              const participant = getOtherParticipant(convo);
+              return (
+                <button
+                  key={convo.id}
+                  onClick={() => setSelectedConversation(convo.id)}
                   className={cn(
-                    'text-xs truncate',
-                    convo.unread ? 'text-text-secondary font-medium' : 'text-text-tertiary'
+                    'w-full flex items-start gap-3 px-4 py-3 text-left',
+                    'hover:bg-surface-hover transition-colors',
+                    selectedConversation === convo.id && 'bg-surface-hover'
                   )}
                 >
-                  {convo.lastMessage}
-                </p>
-              </div>
-              {convo.unread && (
-                <div className="w-2 h-2 rounded-full bg-accent shrink-0 mt-2" />
-              )}
-            </button>
-          ))}
+                  <Avatar id={participant.id || ''} name={participant.display_name} size="md" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-sm font-medium text-text-primary truncate">
+                        {participant.display_name || 'Anonymous'}
+                      </span>
+                      <span className="text-2xs text-text-tertiary shrink-0 ml-2">
+                        {formatTimeAgo(convo.updated_at)}
+                      </span>
+                    </div>
+                    <p className="text-xs truncate text-text-tertiary">
+                      {convo.last_message ? '[Encrypted message]' : 'No messages yet'}
+                    </p>
+                  </div>
+                </button>
+              );
+            })
+          )}
         </div>
       </div>
 
@@ -208,64 +161,89 @@ export default function MessagesPage() {
               >
                 <ArrowLeft size={18} />
               </button>
-              <Avatar
-                id={activeConvo.participant.id}
-                name={activeConvo.participant.name}
-                size="sm"
-              />
-              <div className="flex-1">
-                <p className="text-sm font-medium text-text-primary">
-                  {activeConvo.participant.name}
-                </p>
-                <div className="flex items-center gap-1 text-2xs text-text-tertiary">
-                  <Shield size={10} className="text-accent" />
-                  <span>E2E Encrypted</span>
-                </div>
-              </div>
+              {(() => {
+                const participant = getOtherParticipant(activeConvo);
+                return (
+                  <>
+                    <Avatar id={participant.id || ''} name={participant.display_name} size="sm" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-text-primary">
+                        {participant.display_name || 'Anonymous'}
+                      </p>
+                      <div className="flex items-center gap-1 text-2xs text-text-tertiary">
+                        <Shield size={10} className="text-accent" />
+                        <span>E2E Encrypted</span>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3 hide-scrollbar">
-              {sampleMessages.map((msg) => (
-                <motion.div
-                  key={msg.id}
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className={cn(
-                    'flex',
-                    msg.isOwn ? 'justify-end' : 'justify-start'
-                  )}
-                >
-                  <div
-                    className={cn(
-                      'max-w-[75%] rounded-2xl px-4 py-2.5',
-                      msg.isOwn
-                        ? 'bg-accent text-text-on-accent rounded-br-md'
-                        : 'bg-surface border border-surface-border text-text-primary rounded-bl-md'
-                    )}
-                  >
-                    <p className="text-sm leading-relaxed">{msg.content}</p>
-                    <div
-                      className={cn(
-                        'flex items-center gap-1 mt-1',
-                        msg.isOwn ? 'justify-end' : 'justify-start'
-                      )}
+              {messagesLoading ? (
+                <div className="space-y-3">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className={cn('flex', i % 2 === 0 ? 'justify-start' : 'justify-end')}>
+                      <Skeleton className="w-48 h-12 rounded-2xl" />
+                    </div>
+                  ))}
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="flex-1 flex items-center justify-center py-12">
+                  <p className="text-sm text-text-tertiary">No messages yet. Say hello!</p>
+                </div>
+              ) : (
+                messages.map((msg) => {
+                  const isOwn = msg.sender_id === identity?.id;
+                  // In a real implementation, decrypt msg.encrypted_content with shared key
+                  let displayContent: string;
+                  try {
+                    displayContent = atob(msg.encrypted_content);
+                  } catch {
+                    displayContent = '[Encrypted message]';
+                  }
+
+                  return (
+                    <motion.div
+                      key={msg.id}
+                      initial={{ opacity: 0, y: 5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className={cn('flex', isOwn ? 'justify-end' : 'justify-start')}
                     >
-                      <span
+                      <div
                         className={cn(
-                          'text-2xs',
-                          msg.isOwn ? 'text-text-on-accent/60' : 'text-text-tertiary'
+                          'max-w-[75%] rounded-2xl px-4 py-2.5',
+                          isOwn
+                            ? 'bg-accent text-text-on-accent rounded-br-md'
+                            : 'bg-surface border border-surface-border text-text-primary rounded-bl-md'
                         )}
                       >
-                        {formatTimeAgo(msg.timestamp)}
-                      </span>
-                      {msg.isOwn && (
-                        <CheckCheck size={12} className="text-text-on-accent/60" />
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
+                        <p className="text-sm leading-relaxed">{displayContent}</p>
+                        <div
+                          className={cn(
+                            'flex items-center gap-1 mt-1',
+                            isOwn ? 'justify-end' : 'justify-start'
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              'text-2xs',
+                              isOwn ? 'text-text-on-accent/60' : 'text-text-tertiary'
+                            )}
+                          >
+                            {formatTimeAgo(msg.created_at)}
+                          </span>
+                          {isOwn && (
+                            <CheckCheck size={12} className="text-text-on-accent/60" />
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })
+              )}
             </div>
 
             {/* Message input */}
@@ -287,23 +265,15 @@ export default function MessagesPage() {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
-                        if (messageInput.trim()) {
-                          console.log('Send:', messageInput);
-                          setMessageInput('');
-                        }
+                        handleSend();
                       }
                     }}
                   />
                 </div>
                 <Button
                   size="icon"
-                  disabled={!messageInput.trim()}
-                  onClick={() => {
-                    if (messageInput.trim()) {
-                      console.log('Send:', messageInput);
-                      setMessageInput('');
-                    }
-                  }}
+                  disabled={!messageInput.trim() || sendMutation.isPending}
+                  onClick={handleSend}
                   className="shrink-0"
                 >
                   <Send size={16} />

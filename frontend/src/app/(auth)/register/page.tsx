@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
 import { cn } from '@/lib/utils';
-import { generateKeypair, type KeyPair } from '@/lib/crypto';
+import { generateKeypair, signChallenge, type KeyPair } from '@/lib/crypto';
 import { useAuthStore } from '@/lib/store';
 import { api } from '@/lib/api';
 import toast from 'react-hot-toast';
@@ -62,11 +62,22 @@ export default function RegisterPage() {
     if (!keypair) return;
     setIsRegistering(true);
     try {
-      const tokens = await api.register(keypair.publicKey, displayName || undefined);
+      // Step 1: Register — send public key, get back identity + challenge
+      const registerResult = await api.register(keypair.publicKey, displayName || undefined);
+
+      // Step 2: Sign the challenge with the private key
+      const signature = signChallenge(registerResult.challenge, keypair.secretKey);
+
+      // Step 3: Login with the signed challenge to get tokens
+      const tokens = await api.login(
+        registerResult.fingerprint,
+        registerResult.challenge,
+        signature
+      );
       setTokens(tokens);
       setKeypair({ publicKey: keypair.publicKey, secretKey: keypair.secretKey });
 
-      // Fetch identity
+      // Fetch full identity
       const identity = await api.getMe();
       setIdentity(identity);
 

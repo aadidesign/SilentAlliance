@@ -11,7 +11,6 @@ import {
   FileText,
   Copy,
   Check,
-  ExternalLink,
 } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
@@ -19,70 +18,12 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Tabs } from '@/components/ui/Tabs';
 import { PostCard } from '@/components/post/PostCard';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { cn, formatNumber, formatTimeAgo, shortenFingerprint } from '@/lib/utils';
+import { formatNumber, formatTimeAgo, shortenFingerprint } from '@/lib/utils';
 import { pageEntrance } from '@/lib/motion';
-import type { IdentityPublic, PostWithContext } from '@/types';
-
-const sampleIdentity: IdentityPublic = {
-  id: 'a1',
-  public_key_fingerprint: 'abc123def456789abcdef0123456789abcdef0123456789abcdef0123456789a',
-  display_name: 'PrivacyAdvocate',
-  avatar_hash: null,
-  bio: 'Fighting for digital rights and online privacy. Crypto enthusiast. Open-source contributor.',
-  karma: 4200,
-  is_verified: true,
-  created_at: new Date(Date.now() - 86400000 * 365).toISOString(),
-};
-
-const sampleUserPosts: PostWithContext[] = [
-  {
-    id: 'up1',
-    space_id: 'sp1',
-    author_id: 'a1',
-    title: 'The state of privacy in 2026: Are we losing the battle?',
-    content: 'With recent developments in surveillance technology...',
-    content_type: 'text',
-    url: null,
-    media_ids: [],
-    upvotes: 342,
-    downvotes: 18,
-    score: 324,
-    comment_count: 87,
-    is_pinned: false,
-    is_locked: false,
-    is_removed: false,
-    removed_reason: null,
-    created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-    updated_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-    author: sampleIdentity,
-    space: { id: 'sp1', name: 'privacy', slug: 'privacy', icon_url: null, subscriber_count: 8200 },
-    user_vote: null,
-  },
-  {
-    id: 'up2',
-    space_id: 'sp2',
-    author_id: 'a1',
-    title: 'Self-hosting guide: Take back control of your data',
-    content: 'A comprehensive guide to self-hosting essential services...',
-    content_type: 'text',
-    url: null,
-    media_ids: [],
-    upvotes: 189,
-    downvotes: 7,
-    score: 182,
-    comment_count: 45,
-    is_pinned: false,
-    is_locked: false,
-    is_removed: false,
-    removed_reason: null,
-    created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 3).toISOString(),
-    author: sampleIdentity,
-    space: { id: 'sp2', name: 'technology', slug: 'technology', icon_url: null, subscriber_count: 34100 },
-    user_vote: 1,
-  },
-];
+import { useIdentity, useIdentityPosts, useIdentityComments } from '@/hooks/queries';
+import { useVotePost } from '@/hooks/mutations';
 
 const profileTabs = [
   { id: 'posts', label: 'Posts', icon: <FileText size={14} /> },
@@ -91,15 +32,52 @@ const profileTabs = [
 
 export default function ProfilePage() {
   const params = useParams();
+  const userId = params.id as string;
   const [activeTab, setActiveTab] = useState('posts');
   const [copied, setCopied] = useState(false);
-  const identity = sampleIdentity;
+
+  const { data: identity, isLoading: identityLoading } = useIdentity(userId);
+  const { data: postsData, isLoading: postsLoading } = useIdentityPosts(userId);
+  const { data: commentsData, isLoading: commentsLoading } = useIdentityComments(userId);
+  const voteMutation = useVotePost();
+
+  const posts = postsData?.data ?? [];
+  const comments = commentsData?.data ?? [];
 
   const handleCopyFingerprint = () => {
+    if (!identity) return;
     navigator.clipboard.writeText(identity.public_key_fingerprint);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  if (identityLoading) {
+    return (
+      <div className="space-y-6">
+        <Card className="p-6">
+          <div className="flex items-start gap-5">
+            <Skeleton className="w-16 h-16 rounded-full" />
+            <div className="flex-1 space-y-3">
+              <Skeleton className="w-40 h-6" />
+              <Skeleton className="w-60 h-3" />
+              <Skeleton className="w-full h-12" />
+              <Skeleton className="w-48 h-4" />
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!identity) {
+    return (
+      <div className="text-center py-20">
+        <Shield size={32} className="mx-auto text-text-tertiary mb-3" />
+        <h2 className="text-lg font-semibold text-text-primary mb-1">User not found</h2>
+        <p className="text-sm text-text-tertiary">This identity may not exist.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -175,25 +153,67 @@ export default function ProfilePage() {
       <div className="space-y-3">
         {activeTab === 'posts' && (
           <>
-            {sampleUserPosts.map((post, i) => (
-              <motion.div
-                key={post.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: Math.min(i * 0.05, 0.3) }}
-              >
-                <PostCard post={post} onVote={(value) => console.log('Vote:', value)} />
-              </motion.div>
-            ))}
+            {postsLoading ? (
+              Array.from({ length: 2 }).map((_, i) => (
+                <Card key={i} className="p-4 space-y-2">
+                  <Skeleton className="w-3/4 h-5" />
+                  <Skeleton className="w-1/2 h-3" />
+                </Card>
+              ))
+            ) : posts.length > 0 ? (
+              posts.map((post, i) => (
+                <motion.div
+                  key={post.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: Math.min(i * 0.05, 0.3) }}
+                >
+                  <PostCard post={post as any} onVote={(value) => voteMutation.mutate({ id: post.id, value })} />
+                </motion.div>
+              ))
+            ) : (
+              <EmptyState
+                icon={<FileText size={28} />}
+                title="No posts yet"
+                description="This user hasn't posted anything yet."
+              />
+            )}
           </>
         )}
 
         {activeTab === 'comments' && (
-          <EmptyState
-            icon={<MessageSquare size={28} />}
-            title="No comments yet"
-            description="This user hasn't commented on anything yet."
-          />
+          <>
+            {commentsLoading ? (
+              Array.from({ length: 2 }).map((_, i) => (
+                <Card key={i} className="p-4 space-y-2">
+                  <Skeleton className="w-48 h-3" />
+                  <Skeleton className="w-full h-12" />
+                </Card>
+              ))
+            ) : comments.length > 0 ? (
+              comments.map((comment, i) => (
+                <motion.div
+                  key={comment.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: Math.min(i * 0.05, 0.3) }}
+                >
+                  <Card className="p-4">
+                    <p className="text-sm text-text-secondary">{comment.content}</p>
+                    <p className="text-xs text-text-tertiary mt-2">
+                      {formatNumber(comment.score)} points &bull; {formatTimeAgo(comment.created_at)}
+                    </p>
+                  </Card>
+                </motion.div>
+              ))
+            ) : (
+              <EmptyState
+                icon={<MessageSquare size={28} />}
+                title="No comments yet"
+                description="This user hasn't commented on anything yet."
+              />
+            )}
+          </>
         )}
       </div>
     </div>

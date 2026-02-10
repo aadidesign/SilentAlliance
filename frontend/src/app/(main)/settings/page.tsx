@@ -20,14 +20,18 @@ import { Card } from '@/components/ui/Card';
 import { useAuthStore } from '@/lib/store';
 import { cn, shortenFingerprint } from '@/lib/utils';
 import { pageEntrance } from '@/lib/motion';
+import { useRequireAuth } from '@/hooks/useRequireAuth';
+import { useUpdateProfile } from '@/hooks/mutations';
 import toast from 'react-hot-toast';
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { identity, keypair, logout } = useAuthStore();
+  const { isAuthenticated } = useRequireAuth();
+  const { identity, keypair, logout, setIdentity } = useAuthStore();
   const [displayName, setDisplayName] = useState(identity?.display_name || '');
   const [bio, setBio] = useState(identity?.bio || '');
   const [copied, setCopied] = useState<string | null>(null);
+  const updateProfile = useUpdateProfile();
 
   const handleCopy = (value: string, label: string) => {
     navigator.clipboard.writeText(value);
@@ -37,8 +41,17 @@ export default function SettingsPage() {
   };
 
   const handleSave = () => {
-    toast.success('Profile updated!');
+    updateProfile.mutate(
+      { display_name: displayName || undefined, bio: bio || undefined },
+      {
+        onSuccess: (updatedIdentity) => {
+          setIdentity(updatedIdentity);
+        },
+      }
+    );
   };
+
+  if (!isAuthenticated) return null;
 
   const handleLogout = () => {
     logout();
@@ -81,7 +94,12 @@ export default function SettingsPage() {
             />
 
             <div className="flex justify-end">
-              <Button size="sm" onClick={handleSave} leftIcon={<Save size={14} />}>
+              <Button
+                size="sm"
+                onClick={handleSave}
+                leftIcon={<Save size={14} />}
+                isLoading={updateProfile.isPending}
+              >
                 Save Changes
               </Button>
             </div>

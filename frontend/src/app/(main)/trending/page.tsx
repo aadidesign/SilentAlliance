@@ -5,29 +5,22 @@ import { TrendingUp, Users, ArrowUp } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Skeleton } from '@/components/ui/Skeleton';
 import Link from 'next/link';
-import { cn, formatNumber } from '@/lib/utils';
-
-const trendingSpaces = [
-  { slug: 'privacy', name: 'privacy', growth: '+12%', members: 8234, posts_today: 47 },
-  { slug: 'crypto', name: 'crypto', growth: '+8%', members: 12400, posts_today: 89 },
-  { slug: 'whistleblowers', name: 'whistleblowers', growth: '+23%', members: 5700, posts_today: 15 },
-  { slug: 'defi', name: 'defi', growth: '+6%', members: 9800, posts_today: 34 },
-  { slug: 'technology', name: 'technology', growth: '+4%', members: 34100, posts_today: 156 },
-];
-
-const trendingTopics = [
-  { tag: 'encryption', posts: 234, trend: 'up' },
-  { tag: 'zero-knowledge', posts: 178, trend: 'up' },
-  { tag: 'surveillance', posts: 156, trend: 'up' },
-  { tag: 'open-source', posts: 134, trend: 'up' },
-  { tag: 'vpn', posts: 98, trend: 'up' },
-  { tag: 'tor', posts: 87, trend: 'up' },
-  { tag: 'privacy-tools', posts: 76, trend: 'up' },
-  { tag: 'decentralization', posts: 65, trend: 'up' },
-];
+import { formatNumber } from '@/lib/utils';
+import { useSpaces, usePopularFeed } from '@/hooks/queries';
 
 export default function TrendingPage() {
+  const { data: spacesData, isLoading: spacesLoading } = useSpaces();
+  const { data: popularData, isLoading: postsLoading } = usePopularFeed();
+
+  // Sort spaces by subscriber_count descending as proxy for "trending"
+  const trendingSpaces = [...(spacesData?.data ?? [])].sort(
+    (a, b) => b.subscriber_count - a.subscriber_count
+  ).slice(0, 10);
+
+  const popularPosts = popularData?.data ?? [];
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-text-primary flex items-center gap-2">
@@ -38,75 +31,101 @@ export default function TrendingPage() {
       {/* Trending Spaces */}
       <div>
         <h2 className="text-sm font-semibold text-text-secondary mb-3 uppercase tracking-wider">
-          Growing Spaces
+          Top Spaces
         </h2>
         <div className="space-y-2">
-          {trendingSpaces.length === 0 ? (
+          {spacesLoading ? (
+            Array.from({ length: 5 }).map((_, i) => (
+              <Card key={i} padding="sm" className="flex items-center gap-4 px-4">
+                <Skeleton className="w-6 h-5" />
+                <Skeleton className="w-10 h-10 rounded-xl" />
+                <div className="flex-1 space-y-1">
+                  <Skeleton className="w-24 h-4" />
+                  <Skeleton className="w-36 h-3" />
+                </div>
+              </Card>
+            ))
+          ) : trendingSpaces.length === 0 ? (
             <EmptyState
               icon={<TrendingUp size={28} />}
-              title="Nothing trending yet"
-              description="Check back soon. Growing spaces will appear here."
+              title="No spaces yet"
+              description="Create the first space and start building a community."
             />
-          ) : trendingSpaces.map((space, i) => (
-            <motion.div
-              key={space.slug}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.3, delay: Math.min(i * 0.05, 0.3) }}
-            >
-              <Link href={`/s/${space.slug}`}>
-                <Card hover padding="sm" className="flex items-center gap-4 px-4">
-                  <span className="text-lg font-bold text-text-tertiary w-6 text-right">
-                    {i + 1}
-                  </span>
-                  <div className="w-10 h-10 rounded-xl bg-surface-hover flex items-center justify-center shrink-0">
-                    <span className="text-sm font-bold text-accent">
-                      {space.name.charAt(0).toUpperCase()}
+          ) : (
+            trendingSpaces.map((space, i) => (
+              <motion.div
+                key={space.id}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3, delay: Math.min(i * 0.05, 0.3) }}
+              >
+                <Link href={`/s/${space.slug}`}>
+                  <Card hover padding="sm" className="flex items-center gap-4 px-4">
+                    <span className="text-lg font-bold text-text-tertiary w-6 text-right">
+                      {i + 1}
                     </span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-text-primary">s/{space.name}</p>
-                    <p className="text-xs text-text-tertiary">
-                      {formatNumber(space.members)} members &bull; {space.posts_today} posts today
-                    </p>
-                  </div>
-                  <Badge variant="success">
-                    <ArrowUp size={10} className="mr-0.5" />
-                    {space.growth}
-                  </Badge>
-                </Card>
-              </Link>
-            </motion.div>
-          ))}
+                    <div className="w-10 h-10 rounded-xl bg-surface-hover flex items-center justify-center shrink-0">
+                      <span className="text-sm font-bold text-accent">
+                        {space.name.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-text-primary">s/{space.slug}</p>
+                      <p className="text-xs text-text-tertiary">
+                        {formatNumber(space.subscriber_count)} members &bull; {formatNumber(space.post_count)} posts
+                      </p>
+                    </div>
+                    <Badge variant="success">
+                      <Users size={10} className="mr-0.5" />
+                      {formatNumber(space.subscriber_count)}
+                    </Badge>
+                  </Card>
+                </Link>
+              </motion.div>
+            ))
+          )}
         </div>
       </div>
 
-      {/* Trending Topics */}
+      {/* Popular Posts */}
       <div>
         <h2 className="text-sm font-semibold text-text-secondary mb-3 uppercase tracking-wider">
-          Hot Topics
+          Popular Right Now
         </h2>
-        <Card>
-          <div className="flex flex-wrap gap-2">
-            {trendingTopics.map((topic, i) => (
+        <div className="space-y-2">
+          {postsLoading ? (
+            Array.from({ length: 3 }).map((_, i) => (
+              <Card key={i} padding="sm" className="space-y-2 px-4">
+                <Skeleton className="w-3/4 h-4" />
+                <Skeleton className="w-1/2 h-3" />
+              </Card>
+            ))
+          ) : popularPosts.length === 0 ? (
+            <Card className="text-center py-8 text-sm text-text-tertiary">
+              No popular posts yet.
+            </Card>
+          ) : (
+            popularPosts.slice(0, 10).map((post, i) => (
               <motion.div
-                key={topic.tag}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
+                key={post.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.2, delay: Math.min(i * 0.03, 0.3) }}
               >
-                <button className="flex items-center gap-2 px-3 py-2 rounded-xl bg-bg-tertiary border border-surface-border hover:border-accent/20 hover:bg-accent-muted/5 transition-all duration-200 group">
-                  <span className="text-sm text-text-secondary group-hover:text-accent transition-colors">
-                    #{topic.tag}
-                  </span>
-                  <span className="text-2xs text-text-tertiary">
-                    {topic.posts}
-                  </span>
-                </button>
+                <Link href={`/post/${post.id}`}>
+                  <Card hover padding="sm" className="px-4">
+                    <p className="text-sm font-medium text-text-primary line-clamp-1">
+                      {post.title}
+                    </p>
+                    <p className="text-xs text-text-tertiary mt-0.5">
+                      s/{post.space?.slug} &bull; {formatNumber(post.score)} points &bull; {formatNumber(post.comment_count)} comments
+                    </p>
+                  </Card>
+                </Link>
               </motion.div>
-            ))}
-          </div>
-        </Card>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );
