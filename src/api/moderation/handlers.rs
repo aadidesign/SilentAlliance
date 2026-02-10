@@ -8,8 +8,33 @@ use validator::Validate;
 use crate::api::extractors::Pagination;
 use crate::domain::entities::*;
 use crate::errors::{ApiError, ApiResult};
-use crate::middleware::auth::AuthenticatedUser;
+use crate::middleware::auth::{AuthenticatedUser, check_moderator};
 use crate::AppState;
+
+/// Check if user is a global moderator (has moderator role in any space,
+/// or is an admin). For production, this should be replaced with a
+/// dedicated global_roles table or admin flag on the identity.
+async fn require_global_moderator(
+    state: &Arc<AppState>,
+    identity_id: Uuid,
+) -> ApiResult<()> {
+    let is_mod: Option<bool> = sqlx::query_scalar!(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM space_members
+            WHERE identity_id = $1 AND role IN ('moderator', 'admin')
+        ) as "exists!"
+        "#,
+        identity_id
+    )
+    .fetch_one(state.db.pool())
+    .await?;
+
+    if !is_mod.unwrap_or(false) {
+        return Err(ApiError::Forbidden);
+    }
+    Ok(())
+}
 
 /// Create a report
 pub async fn create_report(
@@ -49,7 +74,9 @@ pub async fn list_reports(
     Query(params): Query<ReportListParams>,
     Pagination(pagination): Pagination,
 ) -> ApiResult<Json<PaginatedResponse<Report>>> {
-    // Check if user is a global moderator (simplified - would check roles)
+    // Verify the user has moderator privileges
+    require_global_moderator(&state, user.identity_id).await?;
+
     let reports = sqlx::query_as!(
         Report,
         r#"
@@ -79,12 +106,14 @@ pub async fn list_reports(
     }))
 }
 
-/// Get report by ID
+/// Get report by ID (moderators only)
 pub async fn get_report(
     State(state): State<Arc<AppState>>,
-    _user: AuthenticatedUser,
+    user: AuthenticatedUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<Report>> {
+    require_global_moderator(&state, user.identity_id).await?;
+
     let report = sqlx::query_as!(
         Report,
         r#"
@@ -103,13 +132,15 @@ pub async fn get_report(
     Ok(Json(report))
 }
 
-/// Update report status
+/// Update report status (moderators only)
 pub async fn update_report(
     State(state): State<Arc<AppState>>,
     user: AuthenticatedUser,
     Path(id): Path<Uuid>,
     Json(request): Json<UpdateReportRequest>,
 ) -> ApiResult<Json<Report>> {
+    require_global_moderator(&state, user.identity_id).await?;
+
     let report = sqlx::query_as!(
         Report,
         r#"
@@ -138,6 +169,16 @@ pub async fn remove_post(
     Path(id): Path<Uuid>,
     Json(request): Json<RemoveContentRequest>,
 ) -> ApiResult<StatusCode> {
+    // Look up the post's space and verify moderator privileges
+    let post = sqlx::query!("SELECT space_id FROM posts WHERE id = $1", id)
+        .fetch_optional(state.db.pool())
+        .await?
+        .ok_or_else(|| ApiError::NotFound("Post not found".to_string()))?;
+
+    if !check_moderator(&state, user.identity_id, post.space_id).await? {
+        return Err(ApiError::Forbidden);
+    }
+
     sqlx::query!(
         "UPDATE posts SET is_removed = true, removed_reason = $2 WHERE id = $1",
         id,
@@ -152,10 +193,25 @@ pub async fn remove_post(
 /// Remove a comment (moderator action)
 pub async fn remove_comment(
     State(state): State<Arc<AppState>>,
-    _user: AuthenticatedUser,
+    user: AuthenticatedUser,
     Path(id): Path<Uuid>,
     Json(request): Json<RemoveContentRequest>,
 ) -> ApiResult<StatusCode> {
+    // Look up the comment's post -> space to verify moderator privileges
+    let comment = sqlx::query!("SELECT post_id FROM comments WHERE id = $1", id)
+        .fetch_optional(state.db.pool())
+        .await?
+        .ok_or_else(|| ApiError::NotFound("Comment not found".to_string()))?;
+
+    let post = sqlx::query!("SELECT space_id FROM posts WHERE id = $1", comment.post_id)
+        .fetch_optional(state.db.pool())
+        .await?
+        .ok_or_else(|| ApiError::NotFound("Post not found".to_string()))?;
+
+    if !check_moderator(&state, user.identity_id, post.space_id).await? {
+        return Err(ApiError::Forbidden);
+    }
+
     sqlx::query!(
         "UPDATE comments SET is_removed = true, removed_reason = $2 WHERE id = $1",
         id,
@@ -167,13 +223,15 @@ pub async fn remove_comment(
     Ok(StatusCode::OK)
 }
 
-/// Suspend an identity
+/// Suspend an identity (global moderator only)
 pub async fn suspend_identity(
     State(state): State<Arc<AppState>>,
-    _user: AuthenticatedUser,
+    user: AuthenticatedUser,
     Path(id): Path<Uuid>,
     Json(request): Json<SuspendRequest>,
 ) -> ApiResult<StatusCode> {
+    require_global_moderator(&state, user.identity_id).await?;
+
     sqlx::query!(
         "UPDATE identities SET is_suspended = true, suspended_reason = $2, suspended_until = $3 WHERE id = $1",
         id,
@@ -191,12 +249,14 @@ pub async fn suspend_identity(
     Ok(StatusCode::OK)
 }
 
-/// Unsuspend an identity
+/// Unsuspend an identity (global moderator only)
 pub async fn unsuspend_identity(
     State(state): State<Arc<AppState>>,
-    _user: AuthenticatedUser,
+    user: AuthenticatedUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<StatusCode> {
+    require_global_moderator(&state, user.identity_id).await?;
+
     sqlx::query!(
         "UPDATE identities SET is_suspended = false, suspended_reason = NULL, suspended_until = NULL WHERE id = $1",
         id
@@ -231,21 +291,22 @@ pub struct SuspendRequest {
     pub until: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-impl ToString for ReportTargetType {
-    fn to_string(&self) -> String {
-        match self {
+impl std::fmt::Display for ReportTargetType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
             ReportTargetType::Post => "post",
             ReportTargetType::Comment => "comment",
             ReportTargetType::Message => "message",
             ReportTargetType::Identity => "identity",
             ReportTargetType::Space => "space",
-        }.to_string()
+        };
+        write!(f, "{}", s)
     }
 }
 
-impl ToString for ReportReason {
-    fn to_string(&self) -> String {
-        match self {
+impl std::fmt::Display for ReportReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
             ReportReason::Spam => "spam",
             ReportReason::Harassment => "harassment",
             ReportReason::HateSpeech => "hate_speech",
@@ -255,17 +316,19 @@ impl ToString for ReportReason {
             ReportReason::PrivacyViolation => "privacy_violation",
             ReportReason::Impersonation => "impersonation",
             ReportReason::Other => "other",
-        }.to_string()
+        };
+        write!(f, "{}", s)
     }
 }
 
-impl ToString for ReportStatus {
-    fn to_string(&self) -> String {
-        match self {
+impl std::fmt::Display for ReportStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
             ReportStatus::Pending => "pending",
             ReportStatus::Reviewed => "reviewed",
             ReportStatus::Actioned => "actioned",
             ReportStatus::Dismissed => "dismissed",
-        }.to_string()
+        };
+        write!(f, "{}", s)
     }
 }

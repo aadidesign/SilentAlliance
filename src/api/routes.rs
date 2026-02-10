@@ -28,32 +28,40 @@ use super::{auth, identity, spaces, posts, comments, votes, messages, media, not
 
 /// Create the main application router with all routes and middleware
 pub fn create_router(state: Arc<AppState>) -> Router {
+    // Auth middleware layer for protected routes
+    let require_auth = middleware::from_fn_with_state(state.clone(), auth_middleware);
+
+    // Rate limiting layer
+    let rate_limit = middleware::from_fn_with_state(state.clone(), rate_limit_middleware);
+
     // Build API v1 routes
     let api_v1 = Router::new()
         // Health check (no auth required)
         .route("/health", get(health::health_check))
         .route("/health/ready", get(health::readiness_check))
         .route("/health/live", get(health::liveness_check))
-        // Authentication routes
+        // Authentication routes (rate limited, no auth required)
         .nest("/auth", auth_routes())
-        // Identity routes (auth required for most)
+        // Identity routes — public reads, auth-protected writes
         .nest("/identity", identity_routes())
-        // Space routes
+        // Space routes — public reads, auth-protected writes
         .nest("/spaces", spaces_routes())
-        // Post routes
+        // Post routes — public reads, auth-protected writes
         .nest("/posts", posts_routes())
-        // Comment routes
+        // Comment routes — public reads, auth-protected writes
         .nest("/comments", comments_routes())
-        // Message routes (E2E encrypted)
-        .nest("/messages", messages_routes())
-        // Media routes
+        // Message routes (all require auth — E2E encrypted)
+        .nest("/messages", messages_routes().layer(require_auth.clone()))
+        // Media routes — upload requires auth, reads are public
         .nest("/media", media_routes())
-        // Notification routes
-        .nest("/notifications", notifications_routes())
-        // Feed routes
+        // Notification routes (all require auth)
+        .nest("/notifications", notifications_routes().layer(require_auth.clone()))
+        // Feed routes — personalized requires auth, public feeds don't
         .nest("/feed", feed_routes())
-        // Moderation routes
-        .nest("/moderation", moderation_routes());
+        // Moderation routes (all require auth + moderator check inside handlers)
+        .nest("/moderation", moderation_routes().layer(require_auth.clone()))
+        // Apply rate limiting to all API routes
+        .layer(rate_limit);
 
     // Build the main router
     Router::new()
@@ -90,39 +98,55 @@ fn build_cors_layer(settings: &crate::config::CorsSettings) -> CorsLayer {
 
     let mut cors = CorsLayer::new();
 
-    // Set allowed origins
+    // Set allowed origins — warn on any that fail to parse so admins notice misconfiguration
     if settings.allowed_origins.contains(&"*".to_string()) {
         cors = cors.allow_origin(tower_http::cors::Any);
     } else {
         let origins: Vec<HeaderValue> = settings
             .allowed_origins
             .iter()
-            .filter_map(|o| o.parse().ok())
+            .filter_map(|o| {
+                o.parse::<HeaderValue>().map_err(|e| {
+                    tracing::warn!(origin = %o, error = %e, "Invalid CORS origin ignored");
+                }).ok()
+            })
             .collect();
         cors = cors.allow_origin(origins);
     }
 
-    // Set allowed methods
+    // Set allowed methods — warn on invalid entries
     let methods: Vec<Method> = settings
         .allowed_methods
         .iter()
-        .filter_map(|m| m.parse().ok())
+        .filter_map(|m| {
+            m.parse::<Method>().map_err(|e| {
+                tracing::warn!(method = %m, error = %e, "Invalid CORS method ignored");
+            }).ok()
+        })
         .collect();
     cors = cors.allow_methods(methods);
 
-    // Set allowed headers
+    // Set allowed headers — warn on invalid entries
     let headers: Vec<HeaderName> = settings
         .allowed_headers
         .iter()
-        .filter_map(|h| h.parse().ok())
+        .filter_map(|h| {
+            h.parse::<HeaderName>().map_err(|e| {
+                tracing::warn!(header = %h, error = %e, "Invalid CORS header ignored");
+            }).ok()
+        })
         .collect();
     cors = cors.allow_headers(headers);
 
-    // Set exposed headers
+    // Set exposed headers — warn on invalid entries
     let exposed: Vec<HeaderName> = settings
         .exposed_headers
         .iter()
-        .filter_map(|h| h.parse().ok())
+        .filter_map(|h| {
+            h.parse::<HeaderName>().map_err(|e| {
+                tracing::warn!(header = %h, error = %e, "Invalid CORS exposed header ignored");
+            }).ok()
+        })
         .collect();
     cors = cors.expose_headers(exposed);
 

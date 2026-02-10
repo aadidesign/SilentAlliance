@@ -1,4 +1,7 @@
 //! Vote handlers
+//!
+//! Handles upvoting/downvoting posts and comments with proper transaction
+//! safety, vote value validation, and correct score calculations.
 
 use axum::{extract::{Path, State}, http::StatusCode, Json};
 use std::sync::Arc;
@@ -9,6 +12,16 @@ use crate::errors::{ApiError, ApiResult};
 use crate::middleware::auth::AuthenticatedUser;
 use crate::AppState;
 
+/// Allowed vote values: 1 (upvote), -1 (downvote), 0 (remove vote)
+fn validate_vote_value(value: i16) -> ApiResult<()> {
+    match value {
+        -1 | 0 | 1 => Ok(()),
+        _ => Err(ApiError::InvalidInput(
+            "Vote value must be -1, 0, or 1".to_string(),
+        )),
+    }
+}
+
 /// Vote on a post
 pub async fn vote_post(
     State(state): State<Arc<AppState>>,
@@ -16,29 +29,44 @@ pub async fn vote_post(
     user: AuthenticatedUser,
     Json(request): Json<VoteRequest>,
 ) -> ApiResult<StatusCode> {
-    // Check post exists
-    let post = sqlx::query!("SELECT id, author_id FROM posts WHERE id = $1 AND is_removed = false", post_id)
-        .fetch_optional(state.db.pool())
-        .await?
-        .ok_or_else(|| ApiError::NotFound("Post not found".to_string()))?;
+    validate_vote_value(request.value)?;
+
+    let new_value = request.value;
+
+    // Use a transaction to ensure atomic vote + score update
+    let mut tx = state.db.pool().begin().await?;
+
+    // Check post exists (lock row for update to prevent races)
+    let post = sqlx::query!(
+        "SELECT id, author_id FROM posts WHERE id = $1 AND is_removed = false FOR UPDATE",
+        post_id
+    )
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or_else(|| ApiError::NotFound("Post not found".to_string()))?;
 
     // Get existing vote
     let existing = sqlx::query!(
-        "SELECT id, vote_value FROM votes WHERE identity_id = $1 AND target_type = 'post' AND target_id = $2",
+        "SELECT id, vote_value FROM votes WHERE identity_id = $1 AND target_type = 'post' AND target_id = $2 FOR UPDATE",
         user.identity_id,
         post_id
     )
-    .fetch_optional(state.db.pool())
+    .fetch_optional(&mut *tx)
     .await?;
 
     let old_value = existing.as_ref().map(|v| v.vote_value).unwrap_or(0);
-    let new_value = request.value;
+
+    // Short-circuit if vote hasn't changed
+    if old_value == new_value {
+        tx.commit().await?;
+        return Ok(StatusCode::OK);
+    }
 
     if new_value == 0 {
         // Remove vote
         if let Some(v) = existing {
             sqlx::query!("DELETE FROM votes WHERE id = $1", v.id)
-                .execute(state.db.pool())
+                .execute(&mut *tx)
                 .await?;
         }
     } else if existing.is_some() {
@@ -49,7 +77,7 @@ pub async fn vote_post(
             user.identity_id,
             post_id
         )
-        .execute(state.db.pool())
+        .execute(&mut *tx)
         .await?;
     } else {
         // Create vote
@@ -60,31 +88,45 @@ pub async fn vote_post(
             post_id,
             new_value
         )
-        .execute(state.db.pool())
+        .execute(&mut *tx)
         .await?;
     }
 
-    // Update post vote counts
-    let vote_delta = new_value - old_value;
-    if vote_delta != 0 {
-        if vote_delta > 0 {
-            sqlx::query!("UPDATE posts SET upvotes = upvotes + 1, score = upvotes - downvotes + 1 WHERE id = $1", post_id)
-                .execute(state.db.pool())
-                .await?;
-        } else {
-            sqlx::query!("UPDATE posts SET downvotes = downvotes + 1, score = upvotes - downvotes - 1 WHERE id = $1", post_id)
-                .execute(state.db.pool())
-                .await?;
-        }
+    // Calculate correct upvote/downvote delta
+    // old_value -> new_value: adjust upvotes and downvotes independently
+    let upvote_delta = compute_delta(old_value, new_value, 1);
+    let downvote_delta = compute_delta(old_value, new_value, -1);
 
-        // Update author karma
+    sqlx::query!(
+        r#"
+        UPDATE posts
+        SET upvotes = GREATEST(0, upvotes + $2),
+            downvotes = GREATEST(0, downvotes + $3),
+            score = (upvotes + $2) - (downvotes + $3)
+        WHERE id = $1
+        "#,
+        post_id,
+        upvote_delta as i32,
+        downvote_delta as i32
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    // Update author karma
+    let karma_delta = (new_value - old_value) as i32;
+    if karma_delta != 0 {
         if let Some(author_id) = post.author_id {
-            sqlx::query!("UPDATE identities SET karma = karma + $1 WHERE id = $2", vote_delta as i32, author_id)
-                .execute(state.db.pool())
-                .await?;
+            sqlx::query!(
+                "UPDATE identities SET karma = karma + $1 WHERE id = $2",
+                karma_delta,
+                author_id
+            )
+            .execute(&mut *tx)
+            .await?;
         }
     }
 
+    tx.commit().await?;
     Ok(StatusCode::OK)
 }
 
@@ -104,26 +146,39 @@ pub async fn vote_comment(
     user: AuthenticatedUser,
     Json(request): Json<VoteRequest>,
 ) -> ApiResult<StatusCode> {
-    let comment = sqlx::query!("SELECT id, author_id FROM comments WHERE id = $1 AND is_removed = false", comment_id)
-        .fetch_optional(state.db.pool())
-        .await?
-        .ok_or_else(|| ApiError::NotFound("Comment not found".to_string()))?;
+    validate_vote_value(request.value)?;
+
+    let new_value = request.value;
+
+    let mut tx = state.db.pool().begin().await?;
+
+    let comment = sqlx::query!(
+        "SELECT id, author_id FROM comments WHERE id = $1 AND is_removed = false FOR UPDATE",
+        comment_id
+    )
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or_else(|| ApiError::NotFound("Comment not found".to_string()))?;
 
     let existing = sqlx::query!(
-        "SELECT id, vote_value FROM votes WHERE identity_id = $1 AND target_type = 'comment' AND target_id = $2",
+        "SELECT id, vote_value FROM votes WHERE identity_id = $1 AND target_type = 'comment' AND target_id = $2 FOR UPDATE",
         user.identity_id,
         comment_id
     )
-    .fetch_optional(state.db.pool())
+    .fetch_optional(&mut *tx)
     .await?;
 
     let old_value = existing.as_ref().map(|v| v.vote_value).unwrap_or(0);
-    let new_value = request.value;
+
+    if old_value == new_value {
+        tx.commit().await?;
+        return Ok(StatusCode::OK);
+    }
 
     if new_value == 0 {
         if let Some(v) = existing {
             sqlx::query!("DELETE FROM votes WHERE id = $1", v.id)
-                .execute(state.db.pool())
+                .execute(&mut *tx)
                 .await?;
         }
     } else if existing.is_some() {
@@ -133,7 +188,7 @@ pub async fn vote_comment(
             user.identity_id,
             comment_id
         )
-        .execute(state.db.pool())
+        .execute(&mut *tx)
         .await?;
     } else {
         sqlx::query!(
@@ -143,28 +198,43 @@ pub async fn vote_comment(
             comment_id,
             new_value
         )
-        .execute(state.db.pool())
+        .execute(&mut *tx)
         .await?;
     }
 
-    // Update comment scores and author karma
-    let vote_delta = new_value - old_value;
-    if vote_delta != 0 {
-        sqlx::query!(
-            "UPDATE comments SET upvotes = upvotes + CASE WHEN $1 > 0 THEN 1 ELSE 0 END, downvotes = downvotes + CASE WHEN $1 < 0 THEN 1 ELSE 0 END, score = score + $1 WHERE id = $2",
-            vote_delta as i32,
-            comment_id
-        )
-        .execute(state.db.pool())
-        .await?;
+    // Calculate correct deltas
+    let upvote_delta = compute_delta(old_value, new_value, 1);
+    let downvote_delta = compute_delta(old_value, new_value, -1);
 
+    sqlx::query!(
+        r#"
+        UPDATE comments
+        SET upvotes = GREATEST(0, upvotes + $2),
+            downvotes = GREATEST(0, downvotes + $3),
+            score = (upvotes + $2) - (downvotes + $3)
+        WHERE id = $1
+        "#,
+        comment_id,
+        upvote_delta as i32,
+        downvote_delta as i32
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    let karma_delta = (new_value - old_value) as i32;
+    if karma_delta != 0 {
         if let Some(author_id) = comment.author_id {
-            sqlx::query!("UPDATE identities SET karma = karma + $1 WHERE id = $2", vote_delta as i32, author_id)
-                .execute(state.db.pool())
-                .await?;
+            sqlx::query!(
+                "UPDATE identities SET karma = karma + $1 WHERE id = $2",
+                karma_delta,
+                author_id
+            )
+            .execute(&mut *tx)
+            .await?;
         }
     }
 
+    tx.commit().await?;
     Ok(StatusCode::OK)
 }
 
@@ -175,4 +245,14 @@ pub async fn unvote_comment(
     user: AuthenticatedUser,
 ) -> ApiResult<StatusCode> {
     vote_comment(State(state), Path(comment_id), user, Json(VoteRequest { value: 0 })).await
+}
+
+/// Compute the delta for a specific vote direction.
+/// `direction` is 1 for upvotes, -1 for downvotes.
+///
+/// Returns +1 if gaining this direction, -1 if losing it, 0 if unchanged.
+fn compute_delta(old_value: i16, new_value: i16, direction: i16) -> i16 {
+    let was_this = if old_value == direction { 1i16 } else { 0 };
+    let is_this = if new_value == direction { 1i16 } else { 0 };
+    is_this - was_this
 }

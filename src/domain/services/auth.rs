@@ -6,6 +6,7 @@ use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
+use subtle::ConstantTimeEq;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
@@ -167,14 +168,16 @@ impl JwtService {
         Ok(token_data.claims)
     }
 
-    /// Extract claims without validation (for debugging/logging)
-    pub fn decode_without_validation(&self, token: &str) -> Result<Claims, ApiError> {
+    /// Extract claims for debugging/logging — validates signature but ignores expiration.
+    /// This is intentionally restricted to non-public visibility.
+    #[allow(dead_code)]
+    pub(crate) fn decode_for_logging(&self, token: &str) -> Result<Claims, ApiError> {
         let mut validation = Validation::new(Algorithm::RS256);
-        validation.insecure_disable_signature_validation();
+        // Still validate the signature, just allow expired tokens for logging context
         validation.validate_exp = false;
         validation.validate_nbf = false;
-        validation.set_issuer::<&str>(&[]);
-        validation.set_audience::<&str>(&[]);
+        validation.set_issuer(&[&self.settings.issuer]);
+        validation.set_audience(&[&self.settings.audience]);
 
         let token_data = decode::<Claims>(token, &self.decoding_key, &validation)
             .map_err(|_| ApiError::InvalidToken)?;
@@ -283,11 +286,15 @@ impl OAuthStateManager {
         let state_data = parts[0];
         let provided_mac = parts[1];
 
-        // Verify HMAC
+        // Verify HMAC using constant-time comparison to prevent timing attacks
         let expected_mac = crypto.hmac_sha256(state_data.as_bytes());
         let expected_mac_hex = hex::encode(&expected_mac[..16]);
 
-        if provided_mac != expected_mac_hex {
+        let mac_matches: bool = expected_mac_hex.as_bytes()
+            .ct_eq(provided_mac.as_bytes())
+            .into();
+
+        if !mac_matches {
             warn!("OAuth state HMAC mismatch");
             return Err(ApiError::InvalidOAuthState);
         }

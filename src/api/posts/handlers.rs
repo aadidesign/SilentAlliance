@@ -209,10 +209,21 @@ pub async fn update(
 ) -> ApiResult<Json<Post>> {
     request.validate()?;
 
-    let post = sqlx::query!("SELECT author_id FROM posts WHERE id = $1", id)
-        .fetch_optional(state.db.pool())
-        .await?
-        .ok_or_else(|| ApiError::NotFound("Post not found".to_string()))?;
+    let post = sqlx::query!(
+        "SELECT author_id, is_locked, is_removed FROM posts WHERE id = $1",
+        id
+    )
+    .fetch_optional(state.db.pool())
+    .await?
+    .ok_or_else(|| ApiError::NotFound("Post not found".to_string()))?;
+
+    if post.is_removed {
+        return Err(ApiError::Gone);
+    }
+
+    if post.is_locked {
+        return Err(ApiError::OperationNotAllowed("Post is locked".to_string()));
+    }
 
     if post.author_id != Some(user.identity_id) {
         return Err(ApiError::Forbidden);
@@ -258,9 +269,16 @@ pub async fn delete(
         return Err(ApiError::Forbidden);
     }
 
+    let reason = if is_author {
+        "Deleted by author"
+    } else {
+        "Removed by moderator"
+    };
+
     sqlx::query!(
-        "UPDATE posts SET is_removed = true, removed_reason = 'Deleted by author' WHERE id = $1",
-        id
+        "UPDATE posts SET is_removed = true, removed_reason = $2 WHERE id = $1",
+        id,
+        reason
     )
     .execute(state.db.pool())
     .await?;
@@ -376,13 +394,14 @@ async fn get_user_votes_for_posts(
     Ok(votes.into_iter().map(|v| (v.target_id, v.vote_value)).collect())
 }
 
-impl ToString for ContentType {
-    fn to_string(&self) -> String {
-        match self {
-            ContentType::Text => "text".to_string(),
-            ContentType::Link => "link".to_string(),
-            ContentType::Media => "media".to_string(),
-            ContentType::Poll => "poll".to_string(),
-        }
+impl std::fmt::Display for ContentType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            ContentType::Text => "text",
+            ContentType::Link => "link",
+            ContentType::Media => "media",
+            ContentType::Poll => "poll",
+        };
+        write!(f, "{}", s)
     }
 }

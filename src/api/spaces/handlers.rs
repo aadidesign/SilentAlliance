@@ -89,8 +89,31 @@ pub async fn create(
         ));
     }
 
-    // Generate slug from name
-    let slug = request.name.to_lowercase().replace(' ', "_");
+    // Generate a URL-safe slug from the name:
+    // 1. Lowercase everything
+    // 2. Replace spaces/underscores with hyphens
+    // 3. Strip all non-alphanumeric/hyphen characters
+    // 4. Collapse consecutive hyphens
+    // 5. Trim leading/trailing hyphens
+    let slug: String = request
+        .name
+        .to_lowercase()
+        .chars()
+        .map(|c| if c == ' ' || c == '_' { '-' } else { c })
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
+        .collect();
+    // Collapse consecutive hyphens and trim edges
+    let slug = slug
+        .split('-')
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("-");
+
+    if slug.is_empty() {
+        return Err(ApiError::InvalidInput(
+            "Space name must contain at least one alphanumeric character".to_string(),
+        ));
+    }
 
     // Check if slug is taken
     let existing = sqlx::query_scalar!("SELECT id FROM spaces WHERE slug = $1", &slug)

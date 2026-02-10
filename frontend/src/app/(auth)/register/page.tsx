@@ -85,8 +85,11 @@ export default function RegisterPage() {
       toast.success('Identity created!');
 
       setTimeout(() => router.push('/feed'), 1500);
-    } catch (err) {
-      toast.error('Registration failed. Please try again.');
+    } catch (err: any) {
+      const message = err?.status === 500
+        ? 'Server is unavailable. Make sure the backend is running.'
+        : err?.message || 'Registration failed. Please try again.';
+      toast.error(message);
     } finally {
       setIsRegistering(false);
     }

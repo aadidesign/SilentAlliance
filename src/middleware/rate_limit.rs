@@ -10,7 +10,7 @@ use axum::{
 };
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{debug, warn};
+use tracing::{debug, error, warn};
 
 use crate::infrastructure::cache::RateLimiter;
 use crate::AppState;
@@ -36,21 +36,49 @@ impl Default for RateLimitConfig {
     }
 }
 
-/// Extract rate limit key from request
+/// Extract rate limit key from request.
+///
+/// Prioritises authenticated identity from JWT claims. Falls back to
+/// the peer IP address from `x-real-ip` (set by trusted reverse proxy),
+/// then the *last* entry in `x-forwarded-for` (closest to the proxy),
+/// and finally a generic fallback key.
+///
+/// IMPORTANT: `x-forwarded-for` is only trustworthy when your reverse
+/// proxy strips/overwrites it. We use the *last* value (the one appended
+/// by the proxy) rather than the first (which can be spoofed by the client).
 fn extract_rate_limit_key(request: &Request<axum::body::Body>) -> String {
     // Try to get identity from token (set by auth middleware)
     if let Some(claims) = request.extensions().get::<crate::domain::services::auth::Claims>() {
         return format!("identity:{}", claims.sub);
     }
 
-    // Fall back to IP address
-    request
+    // Prefer x-real-ip (set by trusted proxy like nginx)
+    if let Some(real_ip) = request
+        .headers()
+        .get("x-real-ip")
+        .and_then(|h| h.to_str().ok())
+    {
+        let ip = real_ip.trim();
+        if !ip.is_empty() {
+            return format!("ip:{}", ip);
+        }
+    }
+
+    // Fall back to x-forwarded-for — use the LAST entry (proxy-appended, harder to spoof)
+    if let Some(forwarded) = request
         .headers()
         .get("x-forwarded-for")
         .and_then(|h| h.to_str().ok())
-        .and_then(|h| h.split(',').next())
-        .map(|ip| format!("ip:{}", ip.trim()))
-        .unwrap_or_else(|| "ip:unknown".to_string())
+    {
+        if let Some(ip) = forwarded.rsplit(',').next() {
+            let ip = ip.trim();
+            if !ip.is_empty() {
+                return format!("ip:{}", ip);
+            }
+        }
+    }
+
+    "ip:unknown".to_string()
 }
 
 /// Rate limiting middleware
@@ -93,8 +121,9 @@ pub async fn rate_limit_middleware(
             Ok(response)
         }
         Err(e) => {
-            // On Redis error, allow the request but log
-            warn!(error = %e, "Rate limiter error, allowing request");
+            // On Redis error, allow the request but emit a strong warning.
+            // In a high-security deployment, you may want to reject instead.
+            error!(error = %e, path = %path, key = %key, "Rate limiter Redis error — request allowed without rate check");
             Ok(next.run(request).await)
         }
     }

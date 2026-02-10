@@ -82,6 +82,9 @@ pub async fn create_conversation(
     let conv_id = Uuid::new_v4();
     let now = chrono::Utc::now();
 
+    // Wrap the entire conversation + participants + optional message in a transaction
+    let mut tx = state.db.pool().begin().await?;
+
     // Create conversation
     let conversation = sqlx::query_as!(
         Conversation,
@@ -89,7 +92,7 @@ pub async fn create_conversation(
         conv_id,
         now
     )
-    .fetch_one(state.db.pool())
+    .fetch_one(&mut *tx)
     .await?;
 
     // Add participants (with placeholder encrypted keys - client generates real keys)
@@ -102,7 +105,7 @@ pub async fn create_conversation(
             vec![0u8; 32], // Placeholder - client provides real encrypted key
             now
         )
-        .execute(state.db.pool())
+        .execute(&mut *tx)
         .await?;
     }
 
@@ -122,9 +125,11 @@ pub async fn create_conversation(
             nonce,
             now
         )
-        .execute(state.db.pool())
+        .execute(&mut *tx)
         .await?;
     }
+
+    tx.commit().await?;
 
     Ok((StatusCode::CREATED, Json(conversation)))
 }

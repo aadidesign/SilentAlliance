@@ -8,8 +8,11 @@ use validator::Validate;
 use crate::api::extractors::Pagination;
 use crate::domain::entities::*;
 use crate::errors::{ApiError, ApiResult};
-use crate::middleware::auth::{AuthenticatedUser, OptionalUser};
+use crate::middleware::auth::{AuthenticatedUser, OptionalUser, check_moderator};
 use crate::AppState;
+
+/// Maximum comment nesting depth to prevent abuse
+const MAX_COMMENT_DEPTH: i32 = 10;
 
 /// List comments for a post
 pub async fn list_by_post(
@@ -74,11 +77,30 @@ pub async fn create(
 
     // Calculate depth and path
     let (depth, path) = if let Some(parent_id) = request.parent_id {
-        let parent = sqlx::query!("SELECT depth, path FROM comments WHERE id = $1", parent_id)
-            .fetch_optional(state.db.pool())
-            .await?
-            .ok_or_else(|| ApiError::NotFound("Parent comment not found".to_string()))?;
-        (parent.depth + 1, format!("{}.{}", parent.path, parent_id))
+        let parent = sqlx::query!(
+            "SELECT depth, path, post_id FROM comments WHERE id = $1",
+            parent_id
+        )
+        .fetch_optional(state.db.pool())
+        .await?
+        .ok_or_else(|| ApiError::NotFound("Parent comment not found".to_string()))?;
+
+        // Verify parent comment belongs to the same post
+        if parent.post_id != post_id {
+            return Err(ApiError::InvalidInput(
+                "Parent comment does not belong to this post".to_string(),
+            ));
+        }
+
+        let new_depth = parent.depth + 1;
+        if new_depth > MAX_COMMENT_DEPTH {
+            return Err(ApiError::OperationNotAllowed(format!(
+                "Maximum comment depth of {} exceeded",
+                MAX_COMMENT_DEPTH
+            )));
+        }
+
+        (new_depth, format!("{}.{}", parent.path, parent_id))
     } else {
         (0, "".to_string())
     };
@@ -173,24 +195,47 @@ pub async fn update(
     Ok(Json(updated))
 }
 
-/// Delete a comment (soft delete)
+/// Delete a comment (soft delete) — allowed for the author or a space moderator
 pub async fn delete(
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
     user: AuthenticatedUser,
 ) -> ApiResult<StatusCode> {
-    let comment = sqlx::query!("SELECT author_id FROM comments WHERE id = $1", id)
-        .fetch_optional(state.db.pool())
-        .await?
-        .ok_or_else(|| ApiError::NotFound("Comment not found".to_string()))?;
+    let comment = sqlx::query!(
+        "SELECT author_id, post_id FROM comments WHERE id = $1",
+        id
+    )
+    .fetch_optional(state.db.pool())
+    .await?
+    .ok_or_else(|| ApiError::NotFound("Comment not found".to_string()))?;
 
-    if comment.author_id != Some(user.identity_id) {
-        return Err(ApiError::Forbidden);
+    let is_author = comment.author_id == Some(user.identity_id);
+
+    // If not the author, check if user is a moderator of the post's space
+    if !is_author {
+        let post = sqlx::query!("SELECT space_id FROM posts WHERE id = $1", comment.post_id)
+            .fetch_optional(state.db.pool())
+            .await?
+            .ok_or_else(|| ApiError::NotFound("Post not found".to_string()))?;
+
+        if !check_moderator(&state, user.identity_id, post.space_id).await? {
+            return Err(ApiError::Forbidden);
+        }
     }
 
-    sqlx::query!("UPDATE comments SET is_removed = true WHERE id = $1", id)
-        .execute(state.db.pool())
-        .await?;
+    let reason = if is_author {
+        "Deleted by author"
+    } else {
+        "Removed by moderator"
+    };
+
+    sqlx::query!(
+        "UPDATE comments SET is_removed = true, removed_reason = $2 WHERE id = $1",
+        id,
+        reason
+    )
+    .execute(state.db.pool())
+    .await?;
 
     Ok(StatusCode::NO_CONTENT)
 }

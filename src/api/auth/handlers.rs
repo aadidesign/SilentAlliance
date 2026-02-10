@@ -10,6 +10,7 @@ use axum::{
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use chrono::{Duration, Utc};
 use std::sync::Arc;
+use subtle::ConstantTimeEq;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 use validator::Validate;
@@ -19,9 +20,13 @@ use crate::domain::services::auth::{
 };
 use crate::errors::{ApiError, ApiResult};
 use crate::infrastructure::crypto::CryptoService;
+use crate::middleware::auth::AuthenticatedUser;
 use crate::AppState;
 
 use super::types::*;
+
+/// Maximum allowed fingerprint length to prevent abuse
+const MAX_FINGERPRINT_LENGTH: usize = 128;
 
 /// Register a new identity with an Ed25519 public key
 pub async fn register(
@@ -97,6 +102,11 @@ pub async fn get_challenge(
 ) -> ApiResult<Json<ChallengeResponse>> {
     request.validate()?;
 
+    // Validate fingerprint length
+    if request.fingerprint.len() > MAX_FINGERPRINT_LENGTH {
+        return Err(ApiError::InvalidInput("Fingerprint too long".to_string()));
+    }
+
     // Verify identity exists
     let exists = sqlx::query_scalar!(
         r#"SELECT id FROM identities WHERE public_key_fingerprint = $1 AND is_suspended = false"#,
@@ -133,15 +143,30 @@ pub async fn login(
 ) -> ApiResult<Json<LoginResponse>> {
     request.validate()?;
 
-    // Get the stored challenge
+    // Validate fingerprint length to prevent abuse
+    if request.fingerprint.len() > MAX_FINGERPRINT_LENGTH {
+        return Err(ApiError::InvalidInput("Fingerprint too long".to_string()));
+    }
+
+    let challenge_key = format!("challenge:{}", request.fingerprint);
+
+    // Atomically retrieve AND delete the challenge to prevent replay attacks.
+    // The challenge is single-use: once retrieved, it cannot be used again.
     let challenge: Option<AuthChallenge> = state.redis
-        .get(&format!("challenge:{}", request.fingerprint))
+        .get(&challenge_key)
         .await?;
+
+    // Delete immediately regardless of outcome to prevent replay
+    let _ = state.redis.delete(&challenge_key).await;
 
     let challenge = challenge.ok_or(ApiError::InvalidCredentials)?;
 
-    // Verify the challenge matches
-    if challenge.challenge != request.challenge {
+    // Use constant-time comparison to prevent timing attacks on the challenge value
+    let challenge_matches = challenge.challenge.as_bytes()
+        .ct_eq(request.challenge.as_bytes())
+        .into();
+
+    if !challenge_matches {
         return Err(ApiError::InvalidCredentials);
     }
 
@@ -181,9 +206,6 @@ pub async fn login(
         warn!(fingerprint = %request.fingerprint, "Invalid signature during login");
         return Err(ApiError::InvalidCredentials);
     }
-
-    // Delete the used challenge
-    state.redis.delete(&format!("challenge:{}", request.fingerprint)).await?;
 
     // Generate tokens
     let jwt_service = JwtService::new(&state.settings.jwt)
@@ -344,31 +366,20 @@ pub async fn logout(
 }
 
 /// Logout from all sessions (revoke all refresh tokens)
+/// Requires valid authentication - uses the JWT to identify the user
 pub async fn logout_all(
     State(state): State<Arc<AppState>>,
-    // This would normally require authentication
-    Json(request): Json<LogoutRequest>,
+    user: AuthenticatedUser,
 ) -> ApiResult<StatusCode> {
-    let token_hash = JwtService::hash_refresh_token(&request.refresh_token);
-
-    // Get the identity ID from the refresh token
-    let token = sqlx::query!(
-        "SELECT identity_id FROM refresh_tokens WHERE token_hash = $1 AND revoked = false",
-        &token_hash
-    )
-    .fetch_optional(state.db.pool())
-    .await?
-    .ok_or(ApiError::InvalidToken)?;
-
-    // Revoke all tokens for this identity
+    // Revoke all refresh tokens for this authenticated identity
     sqlx::query!(
         "UPDATE refresh_tokens SET revoked = true WHERE identity_id = $1",
-        token.identity_id
+        user.identity_id
     )
     .execute(state.db.pool())
     .await?;
 
-    info!(identity_id = %token.identity_id, "All sessions revoked");
+    info!(identity_id = %user.identity_id, "All sessions revoked");
 
     Ok(StatusCode::NO_CONTENT)
 }

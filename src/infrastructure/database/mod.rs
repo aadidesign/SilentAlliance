@@ -9,7 +9,7 @@ use sqlx::{
     Pool, Postgres,
 };
 use std::time::Duration;
-use tracing::{info, error};
+use tracing::{error, info};
 
 use crate::config::DatabaseSettings;
 use crate::errors::ApiError;
@@ -130,8 +130,23 @@ impl TransactionExt for DatabasePool {
         T: Send,
     {
         let tx = self.pool.begin().await?;
-        let result = f(tx).await;
-        result
+        match f(tx).await {
+            Ok(value) => {
+                // The closure must return the transaction for us to commit.
+                // Since the current API consumes the transaction, we rely on
+                // the closure to call tx.commit() internally, or we redesign.
+                //
+                // Better approach: the closure receives the transaction by
+                // mutable reference and we commit here. For now, this is a
+                // a pass-through that preserves the existing API contract.
+                Ok(value)
+            }
+            Err(e) => {
+                // Transaction is automatically rolled back when dropped
+                error!(error = %e, "Transaction failed, rolling back");
+                Err(e)
+            }
+        }
     }
 }
 

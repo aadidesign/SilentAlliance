@@ -33,34 +33,60 @@ async fn main() -> anyhow::Result<()> {
     info!("Starting SilentAlliance API Server v{}", env!("CARGO_PKG_VERSION"));
 
     // Load configuration
-    let settings = Settings::load().expect("Failed to load configuration");
+    let settings = match Settings::load() {
+        Ok(s) => s,
+        Err(e) => {
+            error!("Failed to load configuration: {}", e);
+            std::process::exit(1);
+        }
+    };
     info!("Configuration loaded successfully");
 
     // Initialize database connection pool
-    let db_pool = DatabasePool::new(&settings.database)
-        .await
-        .expect("Failed to connect to database");
+    let db_pool = match DatabasePool::new(&settings.database).await {
+        Ok(p) => p,
+        Err(e) => {
+            error!("Failed to connect to database: {}", e);
+            std::process::exit(1);
+        }
+    };
     info!("Database connection pool established");
 
     // Run database migrations
-    db_pool.run_migrations().await.expect("Failed to run database migrations");
+    if let Err(e) = db_pool.run_migrations().await {
+        error!("Failed to run database migrations: {}", e);
+        std::process::exit(1);
+    }
     info!("Database migrations completed");
 
     // Initialize Redis connection pool
-    let redis_pool = RedisPool::new(&settings.redis)
-        .await
-        .expect("Failed to connect to Redis");
+    let redis_pool = match RedisPool::new(&settings.redis).await {
+        Ok(p) => p,
+        Err(e) => {
+            error!("Failed to connect to Redis: {}", e);
+            std::process::exit(1);
+        }
+    };
     info!("Redis connection pool established");
 
     // Initialize cryptographic service
-    let crypto_service = CryptoService::new(&settings.crypto)
-        .expect("Failed to initialize crypto service");
+    let crypto_service = match CryptoService::new(&settings.crypto) {
+        Ok(c) => c,
+        Err(e) => {
+            error!("Failed to initialize crypto service: {}", e);
+            std::process::exit(1);
+        }
+    };
     info!("Cryptographic service initialized");
 
     // Initialize storage service
-    let storage_service = StorageService::new(&settings.storage)
-        .await
-        .expect("Failed to initialize storage service");
+    let storage_service = match StorageService::new(&settings.storage).await {
+        Ok(s) => s,
+        Err(e) => {
+            error!("Failed to initialize storage service: {}", e);
+            std::process::exit(1);
+        }
+    };
     info!("Storage service initialized");
 
     // Create shared application state
@@ -75,8 +101,13 @@ async fn main() -> anyhow::Result<()> {
     // Create the router with all routes and middleware
     let app = create_router(app_state.clone());
 
-    // Bind to the configured address
-    let addr = SocketAddr::from(([0, 0, 0, 0], settings.server.port));
+    // Bind to the configured host and port
+    let host: std::net::IpAddr = settings
+        .server
+        .host
+        .parse()
+        .unwrap_or_else(|_| std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)));
+    let addr = SocketAddr::from((host, settings.server.port));
     let listener = tokio::net::TcpListener::bind(addr).await?;
 
     info!("Server listening on http://{}", addr);

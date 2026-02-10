@@ -245,14 +245,37 @@ impl StorageService {
         Ok(Some(relative_path))
     }
 
-    /// Get a file by its relative path
-    pub async fn get_file(&self, relative_path: &str) -> Result<Vec<u8>, ApiError> {
-        let full_path = self.storage_path.join(relative_path);
-
-        // Validate path doesn't escape storage directory
-        if !full_path.starts_with(&self.storage_path) {
+    /// Resolve a relative path and ensure it stays within the storage directory.
+    /// Uses canonicalization to prevent path traversal attacks like `../../etc/passwd`.
+    fn resolve_safe_path(&self, relative_path: &str) -> Result<PathBuf, ApiError> {
+        // Reject obvious traversal patterns early
+        if relative_path.contains("..") || relative_path.starts_with('/') || relative_path.starts_with('\\') {
             return Err(ApiError::InvalidInput("Invalid file path".to_string()));
         }
+
+        let full_path = self.storage_path.join(relative_path);
+
+        // Canonicalize both paths to resolve symlinks and normalize components.
+        // For get/delete, the file must already exist for canonicalize to work,
+        // so we fall back to checking the raw join result.
+        let canonical_storage = self.storage_path.canonicalize().unwrap_or_else(|_| self.storage_path.clone());
+        let canonical_full = full_path.canonicalize().unwrap_or(full_path.clone());
+
+        if !canonical_full.starts_with(&canonical_storage) {
+            warn!(
+                attempted_path = %relative_path,
+                resolved = %canonical_full.display(),
+                "Path traversal attempt blocked"
+            );
+            return Err(ApiError::InvalidInput("Invalid file path".to_string()));
+        }
+
+        Ok(canonical_full)
+    }
+
+    /// Get a file by its relative path
+    pub async fn get_file(&self, relative_path: &str) -> Result<Vec<u8>, ApiError> {
+        let full_path = self.resolve_safe_path(relative_path)?;
 
         fs::read(&full_path).await.map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
@@ -266,35 +289,35 @@ impl StorageService {
 
     /// Delete a file
     pub async fn delete_file(&self, relative_path: &str) -> Result<(), ApiError> {
-        let full_path = self.storage_path.join(relative_path);
+        let full_path = self.resolve_safe_path(relative_path)?;
 
-        // Validate path doesn't escape storage directory
-        if !full_path.starts_with(&self.storage_path) {
-            return Err(ApiError::InvalidInput("Invalid file path".to_string()));
-        }
-
-        fs::remove_file(&full_path).await.map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                // File already doesn't exist, consider this success
-                return Ok(());
+        match fs::remove_file(&full_path).await {
+            Ok(_) => {
+                debug!(path = %relative_path, "File deleted");
+                Ok(())
             }
-            error!(error = %e, path = %full_path.display(), "Failed to delete file");
-            ApiError::StorageError("Failed to delete file".to_string())
-        })?;
-
-        debug!(path = %relative_path, "File deleted");
-        Ok(())
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                // File already doesn't exist — consider this success
+                Ok(())
+            }
+            Err(e) => {
+                error!(error = %e, path = %full_path.display(), "Failed to delete file");
+                Err(ApiError::StorageError("Failed to delete file".to_string()))
+            }
+        }
     }
 
     /// Check if a file exists
     pub async fn file_exists(&self, relative_path: &str) -> bool {
-        let full_path = self.storage_path.join(relative_path);
-        full_path.exists() && full_path.is_file()
+        match self.resolve_safe_path(relative_path) {
+            Ok(full_path) => full_path.exists() && full_path.is_file(),
+            Err(_) => false,
+        }
     }
 
     /// Get file metadata
     pub async fn get_metadata(&self, relative_path: &str) -> Result<FileMetadata, ApiError> {
-        let full_path = self.storage_path.join(relative_path);
+        let full_path = self.resolve_safe_path(relative_path)?;
 
         let metadata = fs::metadata(&full_path).await.map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
